@@ -156,11 +156,6 @@ export const MIN_PRICE = Math.min(...CARS.map((c) => c.price));
 export const MAX_PRICE = Math.max(...CARS.map((c) => c.price));
 `;
 
-    fs.writeFileSync(
-        "my_cars.json",
-        JSON.stringify(uniqueCars, null, 2),
-        "utf-8",
-    );
     fs.writeFileSync("src/data/cars.ts", tsContent, "utf-8");
 
     console.log(`\nУспешно!`);

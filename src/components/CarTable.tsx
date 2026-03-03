@@ -123,7 +123,7 @@ export default function CarTable({
                                         <img
                                             src={car.mainPhoto}
                                             alt="Фото"
-                                            className="w-20 h-14 object-cover rounded-lg border border-slate-200"
+                                            className="w-30 h-19 object-cover rounded-lg border border-slate-200"
                                         />
                                     ) : (
                                         <div className="w-20 h-14 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-300 text-xs">

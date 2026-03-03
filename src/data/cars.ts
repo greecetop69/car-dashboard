@@ -1,9 +1,49 @@
-// Файл сгенерирован автоматически — не редактировать вручную
-// Обновлено: 03.03.2026, 18:10:53
+// Обновлено: 03.03.2026, 19:37:30
 
 export const CARS = [
   {
     "id": 1,
+    "year": 2018,
+    "mileageKm": 58164,
+    "price": 7722,
+    "priceWon": 13200000,
+    "url": "https://fem.encar.com/cars/detail/41525836",
+    "inspectionUrl": "https://fem.encar.com/cars/report/inspect/41525836",
+    "diagnosisUrl": "https://fem.encar.com/cars/report/diagnosis/41525836",
+    "accidentUrl": "https://fem.encar.com/cars/report/accident/41525836",
+    "hasInspection": true,
+    "mainPhoto": "https://ci.encar.com/carpicture02/pic4152/41525836_001.jpg",
+    "photos": [
+      {
+        "type": "001",
+        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_001.jpg",
+        "updatedDate": "2026-02-19T08:09:50Z",
+        "ordering": 1
+      },
+      {
+        "type": "003",
+        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_003.jpg",
+        "updatedDate": "2026-02-19T08:09:50Z",
+        "ordering": 3
+      },
+      {
+        "type": "004",
+        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_004.jpg",
+        "updatedDate": "2026-02-19T08:09:50Z",
+        "ordering": 4
+      },
+      {
+        "type": "007",
+        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_007.jpg",
+        "updatedDate": "2026-02-19T08:09:50Z",
+        "ordering": 7
+      }
+    ],
+    "badge": "40 TFSI",
+    "modifiedDate": "03.03.2026, 19:26:46"
+  },
+  {
+    "id": 2,
     "year": 2018,
     "mileageKm": 82738,
     "price": 7956,
@@ -44,7 +84,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:50:02"
   },
   {
-    "id": 2,
+    "id": 3,
     "year": 2018,
     "mileageKm": 92557,
     "price": 8073,
@@ -85,7 +125,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:50:02"
   },
   {
-    "id": 3,
+    "id": 4,
     "year": 2018,
     "mileageKm": 43436,
     "price": 8132,
@@ -126,7 +166,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:46:02"
   },
   {
-    "id": 4,
+    "id": 5,
     "year": 2020,
     "mileageKm": 41843,
     "price": 7898,
@@ -167,7 +207,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:44:02"
   },
   {
-    "id": 5,
+    "id": 6,
     "year": 2018,
     "mileageKm": 74662,
     "price": 7605,
@@ -208,7 +248,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:40:04"
   },
   {
-    "id": 6,
+    "id": 7,
     "year": 2018,
     "mileageKm": 128309,
     "price": 6260,
@@ -249,7 +289,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:36:03"
   },
   {
-    "id": 7,
+    "id": 8,
     "year": 2018,
     "mileageKm": 87117,
     "price": 5265,
@@ -290,7 +330,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:29:03"
   },
   {
-    "id": 8,
+    "id": 9,
     "year": 2018,
     "mileageKm": 56721,
     "price": 7430,
@@ -331,7 +371,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 16:13:02"
   },
   {
-    "id": 9,
+    "id": 10,
     "year": 2018,
     "mileageKm": 52573,
     "price": 7137,
@@ -372,7 +412,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 15:57:02"
   },
   {
-    "id": 10,
+    "id": 11,
     "year": 2018,
     "mileageKm": 78846,
     "price": 6962,
@@ -413,7 +453,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 14:50:05"
   },
   {
-    "id": 11,
+    "id": 12,
     "year": 2018,
     "mileageKm": 139504,
     "price": 5382,
@@ -454,7 +494,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 14:43:03"
   },
   {
-    "id": 12,
+    "id": 13,
     "year": 2018,
     "mileageKm": 54925,
     "price": 8132,
@@ -495,7 +535,7 @@ export const CARS = [
     "modifiedDate": "03.03.2026, 14:06:03"
   },
   {
-    "id": 13,
+    "id": 14,
     "year": 2018,
     "mileageKm": 46318,
     "price": 8073,
@@ -534,47 +574,6 @@ export const CARS = [
     ],
     "badge": "40 TFSI",
     "modifiedDate": "03.03.2026, 12:50:07"
-  },
-  {
-    "id": 14,
-    "year": 2018,
-    "mileageKm": 58164,
-    "price": 7722,
-    "priceWon": 13200000,
-    "url": "https://fem.encar.com/cars/detail/41525836",
-    "inspectionUrl": "https://fem.encar.com/cars/report/inspect/41525836",
-    "diagnosisUrl": "https://fem.encar.com/cars/report/diagnosis/41525836",
-    "accidentUrl": "https://fem.encar.com/cars/report/accident/41525836",
-    "hasInspection": true,
-    "mainPhoto": "https://ci.encar.com/carpicture02/pic4152/41525836_001.jpg",
-    "photos": [
-      {
-        "type": "001",
-        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_001.jpg",
-        "updatedDate": "2026-02-19T08:09:50Z",
-        "ordering": 1
-      },
-      {
-        "type": "003",
-        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_003.jpg",
-        "updatedDate": "2026-02-19T08:09:50Z",
-        "ordering": 3
-      },
-      {
-        "type": "004",
-        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_004.jpg",
-        "updatedDate": "2026-02-19T08:09:50Z",
-        "ordering": 4
-      },
-      {
-        "type": "007",
-        "location": "https://ci.encar.com/carpicture02/pic4152/41525836_007.jpg",
-        "updatedDate": "2026-02-19T08:09:50Z",
-        "ordering": 7
-      }
-    ],
-    "badge": "40 TFSI",
-    "modifiedDate": "03.03.2026, 10:38:11"
   },
   {
     "id": 15,
