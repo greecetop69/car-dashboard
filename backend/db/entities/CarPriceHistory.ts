@@ -22,9 +22,6 @@ export class CarPriceHistory {
   @JoinColumn({ name: "car_id" })
   car!: Car;
 
-  @Column({ name: "price_eur", type: "int" })
-  priceEur!: number;
-
   @Column({ name: "price_won", type: "bigint" })
   priceWon!: string;
 

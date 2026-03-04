@@ -24,9 +24,6 @@ export class Car {
   @Column({ name: "mileage_km", type: "int" })
   mileageKm!: number;
 
-  @Column({ name: "price_eur", type: "int" })
-  priceEur!: number;
-
   @Column({ name: "price_won", type: "bigint" })
   priceWon!: string;
 

@@ -2,11 +2,11 @@ import { AppDataSource } from "./db/data-source.js";
 import { Car } from "./db/entities/Car.js";
 import { CarPriceHistory } from "./db/entities/CarPriceHistory.js";
 import type { ParsedCarRecord } from "./encarService.js";
+import { getWonToEurRate } from "./fx.js";
 import { In } from "typeorm";
 
 export interface PriceHistoryRow {
   priceWon: number;
-  priceEur: number;
   recordedAt: string;
 }
 
@@ -79,7 +79,6 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
           sourceId: parsed.sourceId,
           year: parsed.year,
           mileageKm: parsed.mileageKm,
-          priceEur: parsed.price,
           priceWon: String(parsed.priceWon),
           url: parsed.url,
           inspectionUrl: parsed.inspectionUrl,
@@ -97,7 +96,6 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
       } else {
         car.year = parsed.year;
         car.mileageKm = parsed.mileageKm;
-        car.priceEur = parsed.price;
         car.priceWon = String(parsed.priceWon);
         car.url = parsed.url;
         car.inspectionUrl = parsed.inspectionUrl;
@@ -123,7 +121,6 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
       if (!lastHistory || Number(lastHistory.priceWon) !== parsed.priceWon) {
         const history = historyRepo.create({
           carId: car.id,
-          priceEur: parsed.price,
           priceWon: String(parsed.priceWon),
         });
         await historyRepo.save(history);
@@ -160,6 +157,7 @@ function buildMeta(cars: CarRow[]) {
 
 export async function getCarsFromDb(): Promise<CarsApiResponse> {
   await initializeDatabase();
+  const wonToEur = await getWonToEurRate();
 
   const carRepo = AppDataSource.getRepository(Car);
   const historyRepo = AppDataSource.getRepository(CarPriceHistory);
@@ -172,7 +170,6 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
     .addSelect("c.is_new", "is_new")
     .addSelect("c.year", "year")
     .addSelect("c.mileage_km", "mileage_km")
-    .addSelect("c.price_eur", "price_eur")
     .addSelect("c.price_won", "price_won")
     .addSelect("c.url", "url")
     .addSelect("c.inspection_url", "inspection_url")
@@ -183,7 +180,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
     .addSelect("c.photos_json", "photos_json")
     .addSelect("c.badge", "badge")
     .addSelect("c.modified_date", "modified_date")
-    .orderBy("c.price_eur", "ASC")
+    .orderBy("c.price_won", "ASC")
     .addOrderBy("c.id", "ASC")
     .getRawMany<{
       id: number;
@@ -192,7 +189,6 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       is_new: number;
       year: number;
       mileage_km: number;
-      price_eur: number;
       price_won: string;
       url: string;
       inspection_url: string;
@@ -218,7 +214,6 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
     const existing = historyByCarId.get(history.carId) ?? [];
     existing.push({
       priceWon: Number(history.priceWon),
-      priceEur: history.priceEur,
       recordedAt: history.recordedAt.toISOString(),
     });
     historyByCarId.set(history.carId, existing);
@@ -230,6 +225,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
     const currentPriceWon = Number(row.price_won);
     const priceDeltaWon =
       previousPriceWon == null ? 0 : currentPriceWon - previousPriceWon;
+    const currentPriceEur = Math.round(currentPriceWon * wonToEur);
     const photos =
       typeof row.photos_json === "string"
         ? (JSON.parse(row.photos_json) as ParsedCarRecord["photos"])
@@ -242,7 +238,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       isNew: Boolean(row.is_new),
       year: row.year,
       mileageKm: row.mileage_km,
-      price: row.price_eur,
+      price: currentPriceEur,
       priceWon: currentPriceWon,
       url: row.url,
       inspectionUrl: row.inspection_url,

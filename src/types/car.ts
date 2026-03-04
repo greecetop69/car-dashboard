@@ -7,7 +7,6 @@ export interface CarPhoto {
 
 export interface CarPriceHistoryItem {
   priceWon: number;
-  priceEur: number;
   recordedAt: string;
 }
 

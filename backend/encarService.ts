@@ -31,7 +31,6 @@ export interface ParsedCarRecord {
   sourceId: string;
   year: number;
   mileageKm: number;
-  price: number;
   priceWon: number;
   url: string;
   inspectionUrl: string;
@@ -46,7 +45,6 @@ export interface ParsedCarRecord {
 
 export interface ParsedCarsResponse {
   cars: ParsedCarRecord[];
-  wonToEur: number;
   updatedAt: string;
 }
 
@@ -126,18 +124,6 @@ async function fetchOnePage(type: string, offset: number) {
   return data.SearchResults ?? [];
 }
 
-async function getWonToEurRate() {
-  const fallback = 0.00058;
-  try {
-    const response = await fetch("https://api.exchangerate-api.com/v4/latest/KRW");
-    if (!response.ok) return fallback;
-    const data = (await response.json()) as { rates?: { EUR?: number } };
-    return data?.rates?.EUR ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function deduplicate(cars: NormalizedCar[]) {
   const seen = new Set<string>();
   return cars.filter((car) => {
@@ -148,12 +134,11 @@ function deduplicate(cars: NormalizedCar[]) {
   });
 }
 
-function mapCars(cars: NormalizedCar[], wonToEur: number): ParsedCarRecord[] {
+function mapCars(cars: NormalizedCar[]): ParsedCarRecord[] {
   return cars.map((r) => ({
     sourceId: r.sourceId,
     year: r.year,
     mileageKm: r.mileageKm,
-    price: Math.round(r.priceWon * wonToEur),
     priceWon: r.priceWon,
     url: `https://fem.encar.com/cars/detail/${r.sourceId}`,
     inspectionUrl: `https://fem.encar.com/cars/report/inspect/${r.sourceId}`,
@@ -186,12 +171,10 @@ export async function fetchEncarCars(): Promise<ParsedCarsResponse> {
   }
 
   const uniqueCars = deduplicate(allCars);
-  const wonToEur = await getWonToEurRate();
-  const mappedCars = mapCars(uniqueCars, wonToEur);
+  const mappedCars = mapCars(uniqueCars);
 
   return {
     cars: mappedCars,
-    wonToEur,
     updatedAt: new Date().toISOString(),
   };
 }
