@@ -7,9 +7,10 @@ interface Props {
 }
 
 export default function StatsBar({ cars, total }: Props) {
-    const n = cars.length;
-    const avgPrice = n ? Math.round(cars.reduce((s, c) => s + c.price, 0) / n) : 0;
-    const avgMile  = n ? Math.round(cars.reduce((s, c) => s + c.mileageKm, 0) / n) : 0;
+    const activeCars = cars.filter((c) => c.isActive !== false);
+    const n = activeCars.length;
+    const avgPrice = n ? Math.round(activeCars.reduce((s, c) => s + c.price, 0) / n) : 0;
+    const avgMile  = n ? Math.round(activeCars.reduce((s, c) => s + c.mileageKm, 0) / n) : 0;
 
     return (
         <div className="flex flex-wrap gap-4 text-xs text-slate-400 font-mono">

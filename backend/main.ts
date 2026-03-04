@@ -2,7 +2,7 @@ import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { getCarsFromDb, runMigrations, saveParsedCars, setCarFavorite } from "./db.js";
 import { fetchEncarCars } from "./encarService.js";
-import { getInspectionSummaryWithFallback } from "./inspectionService.js";
+import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 
 const PORT = Number(process.env.PORT || 3001);
 
@@ -143,7 +143,16 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         .split(",")
         .map((s) => Number(s.trim()))
         .filter((n) => Number.isInteger(n) && n > 0);
-      const data = await getInspectionSummaryWithFallback(vehicleId, fallbackIds);
+      const carIdRaw = url.searchParams.get("carId");
+      const carId = carIdRaw != null ? Number(carIdRaw) : null;
+      const validCarId =
+        carId != null && Number.isInteger(carId) && carId > 0 ? carId : null;
+
+      const data = await getInspectionSummaryWithCarCache(
+        vehicleId,
+        fallbackIds,
+        validCarId,
+      );
       sendJson(res, 200, data);
     } catch (error) {
       sendJson(res, 500, {

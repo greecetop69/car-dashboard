@@ -66,6 +66,18 @@ export class Car {
   @Column({ name: "is_favorite", type: "boolean", default: false })
   isFavorite!: boolean;
 
+  @Column({ name: "inspection_summary_json", type: "json", nullable: true })
+  inspectionSummaryJson!: unknown | null;
+
+  @Column({ name: "inspection_cache_key", type: "varchar", length: 255, nullable: true })
+  inspectionCacheKey!: string | null;
+
+  @Column({ name: "inspection_fetched_at", type: "datetime", nullable: true })
+  inspectionFetchedAt!: Date | null;
+
+  @Column({ name: "inspection_condition", type: "varchar", length: 32, nullable: true })
+  inspectionCondition!: string | null;
+
   @CreateDateColumn({ name: "created_at", type: "datetime" })
   createdAt!: Date;
 

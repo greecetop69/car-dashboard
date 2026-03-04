@@ -25,6 +25,7 @@ export interface CarRow {
   diagnosisUrl: string;
   accidentUrl: string;
   hasInspection: boolean;
+  inspectionCondition: "clean" | "repair" | "replace" | "replaceRepair" | "notFound" | null;
   mainPhoto: string | null;
   photos: ParsedCarRecord["photos"];
   badge: string;
@@ -47,6 +48,22 @@ export interface CarsApiResponse {
     maxPrice: number;
   };
   updatedAt: string;
+}
+
+function deriveInspectionCondition(rawSummary: unknown): CarRow["inspectionCondition"] {
+  if (!rawSummary || typeof rawSummary !== "object") return null;
+  const summary = rawSummary as {
+    notFound?: unknown;
+    simpleRepair?: unknown;
+    replacedParts?: unknown;
+  };
+  if (summary.notFound === true) return "notFound";
+  const hasReplace = Array.isArray(summary.replacedParts) && summary.replacedParts.length > 0;
+  const hasRepair = summary.simpleRepair === true;
+  if (hasReplace && hasRepair) return "replaceRepair";
+  if (hasReplace) return "replace";
+  if (hasRepair) return "repair";
+  return "clean";
 }
 
 export async function initializeDatabase() {
@@ -179,6 +196,8 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
     .addSelect("c.diagnosis_url", "diagnosis_url")
     .addSelect("c.accident_url", "accident_url")
     .addSelect("c.has_inspection", "has_inspection")
+    .addSelect("c.inspection_condition", "inspection_condition")
+    .addSelect("c.inspection_summary_json", "inspection_summary_json")
     .addSelect("c.main_photo", "main_photo")
     .addSelect("c.photos_json", "photos_json")
     .addSelect("c.badge", "badge")
@@ -199,6 +218,8 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       diagnosis_url: string;
       accident_url: string;
       has_inspection: number;
+      inspection_condition: "clean" | "repair" | "replace" | "replaceRepair" | "notFound" | null;
+      inspection_summary_json: unknown;
       main_photo: string | null;
       photos_json: ParsedCarRecord["photos"] | string;
       badge: string;
@@ -250,6 +271,8 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       diagnosisUrl: row.diagnosis_url,
       accidentUrl: row.accident_url,
       hasInspection: Boolean(row.has_inspection),
+      inspectionCondition:
+        row.inspection_condition ?? deriveInspectionCondition(row.inspection_summary_json),
       mainPhoto: row.main_photo,
       photos,
       badge: row.badge,

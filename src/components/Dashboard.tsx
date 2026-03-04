@@ -1,22 +1,14 @@
-import { useQueries } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { queryKeys } from "../api/queryKeys";
-import { fetchInspection } from "../hooks/useInspection";
 import { useCars, useToggleFavorite } from "../hooks/useCars";
-import type { SortDir, SortKey } from "../types/car";
+import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
-import {
-  getDamageConditionKey,
-  getInspectionIdCandidates,
-  type DamageConditionKey,
-} from "../utils/inspectionCondition";
 import { fmtEur, fmtKm } from "../utils/format";
 import CarTable from "./CarTable";
 import RangeFilter from "./RangeFilter";
 import StatsBar from "./StatsBar";
 
 const DAMAGE_FILTER_OPTIONS: Array<{
-  key: "all" | DamageConditionKey;
+  key: "all" | InspectionConditionKey;
   label: string;
   activeClass: string;
 }> = [
@@ -37,6 +29,10 @@ export default function Dashboard() {
   const toggleFavoriteMutation = useToggleFavorite();
 
   const cars = data?.cars ?? [];
+  const activeTotal = useMemo(
+    () => cars.filter((car) => car.isActive !== false).length,
+    [cars],
+  );
   const limits = {
     minYear: data?.meta?.minYear ?? 0,
     maxYear: data?.meta?.maxYear ?? 0,
@@ -52,51 +48,26 @@ export default function Dashboard() {
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [damageFilter, setDamageFilter] = useState<"all" | DamageConditionKey>("all");
+  const [damageFilter, setDamageFilter] = useState<"all" | InspectionConditionKey>("all");
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
-  const inspectionCars = useMemo(() => cars.filter((car) => car.hasInspection), [cars]);
-  const inspectionQueries = useQueries({
-    queries:
-      damageFilter === "all"
-        ? []
-        : inspectionCars.map((car) => {
-            const ids = getInspectionIdCandidates(car);
-            const primaryId = ids[0] ?? null;
-            const fallbackIds = ids.slice(1);
-
-            return {
-              queryKey:
-                primaryId != null
-                  ? queryKeys.inspection(primaryId, fallbackIds)
-                  : ["inspection", "none", car.id],
-              queryFn: () => fetchInspection(primaryId as number, fallbackIds),
-              enabled: primaryId != null,
-            };
-          }),
-  });
-
   const conditionByCarId = useMemo(() => {
-    const map = new Map<number, DamageConditionKey>();
+    const map = new Map<number, InspectionConditionKey>();
     if (damageFilter === "all") return map;
 
-    let queryIndex = 0;
     for (const car of cars) {
       if (!car.hasInspection) {
         map.set(car.id, "notFound");
         continue;
       }
-
-      const query = inspectionQueries[queryIndex];
-      queryIndex += 1;
-      if (query?.data) {
-        map.set(car.id, getDamageConditionKey(query.data));
+      if (car.inspectionCondition) {
+        map.set(car.id, car.inspectionCondition);
       }
     }
 
     return map;
-  }, [cars, damageFilter, inspectionQueries]);
+  }, [cars, damageFilter]);
 
   useEffect(() => {
     setYearRange([limits.minYear, limits.maxYear]);
@@ -272,7 +243,7 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <StatsBar cars={tabFilteredCars} total={cars.length} />
+            <StatsBar cars={tabFilteredCars} total={activeTotal} />
             {hasFilters && (
               <button
                 onClick={clearAll}
@@ -332,9 +303,10 @@ export default function Dashboard() {
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          Audi A3 · {cars.length} объявлений
+          Audi A3 · {activeTotal} объявлений
         </p>
       </div>
     </div>
   );
 }
+

@@ -1,3 +1,6 @@
+import { AppDataSource } from "./db/data-source.js";
+import { Car } from "./db/entities/Car.js";
+
 interface InspectionType {
   code?: string | null;
   title?: string | null;
@@ -48,6 +51,13 @@ export interface InspectionSummary {
   fetchedAt: string;
 }
 
+export type InspectionConditionKey =
+  | "clean"
+  | "repair"
+  | "replace"
+  | "replaceRepair"
+  | "notFound";
+
 const INSPECTION_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
@@ -58,6 +68,53 @@ const INSPECTION_HEADERS = {
 
 const cache = new Map<number, { data: InspectionSummary; cachedAt: number }>();
 const CACHE_TTL_MS = 15 * 60 * 1000;
+
+function buildInspectionCacheKey(car: Car) {
+  return `${car.sourceId}|${car.priceWon}|${car.modifiedDate}|${car.hasInspection ? 1 : 0}`;
+}
+
+function parsePersistedSummary(raw: unknown): InspectionSummary | null {
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as Partial<InspectionSummary>;
+  if (!Number.isInteger(candidate.vehicleId) || typeof candidate.notFound !== "boolean") {
+    return null;
+  }
+  return {
+    vehicleId: candidate.vehicleId as number,
+    notFound: Boolean(candidate.notFound),
+    vin: candidate.vin ?? null,
+    modelYear: candidate.modelYear ?? null,
+    firstRegistrationDate: candidate.firstRegistrationDate ?? null,
+    mileage: candidate.mileage ?? null,
+    transmission: candidate.transmission ?? null,
+    accident: candidate.accident ?? null,
+    simpleRepair: candidate.simpleRepair ?? null,
+    waterlog: candidate.waterlog ?? null,
+    damages: Array.isArray(candidate.damages) ? candidate.damages : [],
+    replacedParts: Array.isArray(candidate.replacedParts) ? candidate.replacedParts : [],
+    fetchedAt: typeof candidate.fetchedAt === "string" ? candidate.fetchedAt : new Date(0).toISOString(),
+  };
+}
+
+async function getCarById(carId: number) {
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+  const repo = AppDataSource.getRepository(Car);
+  return repo.findOne({ where: { id: carId } });
+}
+
+function getConditionKey(summary: InspectionSummary): InspectionConditionKey {
+  if (summary.notFound) return "notFound";
+
+  const hasReplace = summary.replacedParts.length > 0;
+  const hasRepair = summary.simpleRepair === true;
+
+  if (hasReplace && hasRepair) return "replaceRepair";
+  if (hasReplace) return "replace";
+  if (hasRepair) return "repair";
+  return "clean";
+}
 
 function normalizeDamageItem(item: InspectionOuterItem): InspectionDamageItem {
   const part = item.type?.title?.trim() || "Неизвестная деталь";
@@ -166,4 +223,38 @@ export async function getInspectionSummaryWithFallback(
       fetchedAt: new Date().toISOString(),
     }
   );
+}
+
+export async function getInspectionSummaryWithCarCache(
+  primaryVehicleId: number,
+  fallbackIds: number[],
+  carId: number | null,
+): Promise<InspectionSummary> {
+  if (carId == null) {
+    return getInspectionSummaryWithFallback(primaryVehicleId, fallbackIds);
+  }
+
+  const car = await getCarById(carId);
+  if (!car) {
+    return getInspectionSummaryWithFallback(primaryVehicleId, fallbackIds);
+  }
+
+  const expectedCacheKey = buildInspectionCacheKey(car);
+  const persisted = parsePersistedSummary(car.inspectionSummaryJson);
+  if (persisted && car.inspectionCacheKey === expectedCacheKey) {
+    if (!car.inspectionCondition) {
+      car.inspectionCondition = getConditionKey(persisted);
+      car.inspectionFetchedAt = car.inspectionFetchedAt ?? new Date();
+      await AppDataSource.getRepository(Car).save(car);
+    }
+    return persisted;
+  }
+
+  const fresh = await getInspectionSummaryWithFallback(primaryVehicleId, fallbackIds);
+  car.inspectionSummaryJson = fresh;
+  car.inspectionCacheKey = expectedCacheKey;
+  car.inspectionFetchedAt = new Date();
+  car.inspectionCondition = getConditionKey(fresh);
+  await AppDataSource.getRepository(Car).save(car);
+  return fresh;
 }

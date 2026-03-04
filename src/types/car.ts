@@ -10,6 +10,13 @@ export interface CarPriceHistoryItem {
   recordedAt: string;
 }
 
+export type InspectionConditionKey =
+  | "clean"
+  | "repair"
+  | "replace"
+  | "replaceRepair"
+  | "notFound";
+
 export interface Car {
   id: number;
   sourceId?: string;
@@ -29,6 +36,7 @@ export interface Car {
   diagnosisUrl: string;
   accidentUrl: string;
   hasInspection: boolean;
+  inspectionCondition?: InspectionConditionKey | null;
   mainPhoto: string | null;
   photos: CarPhoto[];
   badge: string;
