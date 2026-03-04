@@ -309,8 +309,8 @@ export default function CarTable({
                       </div>
                     )}
                     {isInactive && (
-                      <span className="absolute left-2 top-2 rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white shadow-sm">
-                        ПРОПАЛА
+                      <span className="absolute left-2 top-2 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white shadow-sm">
+                        КУПЛЕНА
                       </span>
                     )}
                     {isNew && (
@@ -332,7 +332,16 @@ export default function CarTable({
                 <td className={`w-[190px] whitespace-nowrap px-4 py-4 text-right font-mono font-semibold ${strongText}`}>
                   {caromotoPrice != null ? fmtEur(caromotoPrice) : "—"}
                 </td>
-                <td className={`w-[250px] whitespace-nowrap px-3 py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}>{car.modifiedDate}</td>
+                <td className={`w-[250px] whitespace-nowrap px-3 py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}>
+                  <div className="flex items-center gap-2">
+                    <span>{car.modifiedDate}</span>
+                    {isInactive && (
+                      <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-700">
+                        КУПЛЕНА
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="w-[220px] px-3 py-4">
                   <div className="flex min-h-[3rem] items-center">
                     <DamageBadge car={car} />

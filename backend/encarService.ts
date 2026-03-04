@@ -127,7 +127,9 @@ async function fetchOnePage(type: string, offset: number) {
 function deduplicate(cars: NormalizedCar[]) {
   const seen = new Set<string>();
   return cars.filter((car) => {
-    const key = `${car.year}_${car.mileageKm}_${car.priceWon}`;
+    // A listing identity must be based on source id, otherwise different cars
+    // with same year/mileage/price can incorrectly overwrite each other.
+    const key = car.sourceId || `${car.year}_${car.mileageKm}_${car.priceWon}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
