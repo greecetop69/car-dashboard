@@ -214,7 +214,122 @@ export default function CarTable({
 
   return (
     <div className="w-full overflow-x-hidden">
-      <table className="w-full border-collapse text-base">
+      <div className="space-y-3 p-3 md:hidden">
+        {cars.length === 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">
+            Ничего не найдено
+          </div>
+        )}
+        {cars.map((car) => {
+          const isInactive = car.isActive === false;
+          const isNew = car.isNew === true;
+          const isSelected = selectedId === car.id;
+          const caromotoPrice = getCaromotoPriceEur(car);
+
+          return (
+            <div
+              key={car.id}
+              onClick={() => {
+                if (!isInactive) onSelectRow(car.id);
+              }}
+              className={`rounded-2xl border bg-white p-3 shadow-sm transition-colors ${
+                isInactive
+                  ? "border-slate-200 bg-slate-100/70 opacity-70"
+                  : isSelected
+                    ? "border-blue-300 bg-blue-50"
+                    : "border-slate-200"
+              } ${isNew ? "ring-2 ring-emerald-300/80" : ""}`}
+            >
+              <div className="mb-3 flex gap-3">
+                <div className="relative shrink-0">
+                  {car.mainPhoto ? (
+                    <img
+                      src={car.mainPhoto}
+                      alt="Фото"
+                      className="h-24 w-32 rounded-lg border border-slate-200 object-cover"
+                      style={
+                        isInactive
+                          ? {
+                              filter: "grayscale(100%) contrast(75%) brightness(75%) saturate(50%)",
+                              opacity: 0.65,
+                            }
+                          : undefined
+                      }
+                    />
+                  ) : (
+                    <div className="flex h-24 w-32 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                      нет фото
+                    </div>
+                  )}
+                  {isInactive && (
+                    <span className="absolute left-2 top-2 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+                      КУПЛЕНА
+                    </span>
+                  )}
+                  {isNew && (
+                    <span className="absolute right-2 top-2 rounded-md bg-emerald-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+                      NEW
+                    </span>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-start justify-between gap-2">
+                    <div className="text-sm font-semibold text-slate-800">{car.year}</div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFavorite(car.id, !(car.isFavorite ?? false));
+                      }}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border text-base ${
+                        car.isFavorite
+                          ? "border-amber-300 bg-amber-50 text-amber-500"
+                          : "border-slate-200 bg-white text-slate-400"
+                      }`}
+                    >
+                      {car.isFavorite ? "★" : "☆"}
+                    </button>
+                  </div>
+                  <div className="text-xs text-slate-500">{fmtKm(car.mileageKm)}</div>
+                  <div className="mt-2 text-base font-semibold text-slate-800">{fmtEur(car.price)}</div>
+                  <div className="text-sm font-semibold text-slate-700">{fmtWon(car.priceWon)}</div>
+                  <div className="mt-1 text-xs text-slate-400">{car.modifiedDate}</div>
+                </div>
+              </div>
+
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <DamageBadge car={car} />
+                <div className="text-xs font-medium text-slate-500">
+                  Caromoto: {caromotoPrice != null ? fmtEur(caromotoPrice) : "—"}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setInspectionCar(car);
+                  }}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600"
+                >
+                  Детали
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(car.url, "_blank", "noopener,noreferrer");
+                  }}
+                  className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700"
+                >
+                  Открыть
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <table className="hidden w-full border-collapse text-base md:table">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50">
             <th className="w-[180px] px-5 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Фото</th>
