@@ -6,6 +6,7 @@ import { InitCarsAndPriceHistory2026030401000 } from "./migrations/2026030401-In
 import { AddCarActiveState2026030402000 } from "./migrations/2026030402000-AddCarActiveState.js";
 import { AddCarNewState2026030403000 } from "./migrations/2026030403000-AddCarNewState.js";
 import { DropPriceEurColumns2026030404000 } from "./migrations/2026030404000-DropPriceEurColumns.js";
+import { AddCarFavoriteFlag2026030405000 } from "./migrations/2026030405000-AddCarFavoriteFlag.js";
 
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -20,6 +21,7 @@ export const AppDataSource = new DataSource({
     AddCarActiveState2026030402000,
     AddCarNewState2026030403000,
     DropPriceEurColumns2026030404000,
+    AddCarFavoriteFlag2026030405000,
   ],
   synchronize: false,
   logging: false,

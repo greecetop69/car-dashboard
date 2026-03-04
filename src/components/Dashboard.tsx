@@ -2,7 +2,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { queryKeys } from "../api/queryKeys";
 import { fetchInspection } from "../hooks/useInspection";
-import { useCars } from "../hooks/useCars";
+import { useCars, useToggleFavorite } from "../hooks/useCars";
 import type { SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
 import {
@@ -34,6 +34,7 @@ const DAMAGE_FILTER_OPTIONS: Array<{
 
 export default function Dashboard() {
   const { data, isPending, isError } = useCars();
+  const toggleFavoriteMutation = useToggleFavorite();
 
   const cars = data?.cars ?? [];
   const limits = {
@@ -52,6 +53,7 @@ export default function Dashboard() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [damageFilter, setDamageFilter] = useState<"all" | DamageConditionKey>("all");
+  const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const inspectionCars = useMemo(() => cars.filter((car) => car.hasInspection), [cars]);
@@ -153,6 +155,13 @@ export default function Dashboard() {
       return sortDir === "asc" ? cmp : -cmp;
     });
   }, [filtered, sortKey, sortDir]);
+
+  const tabFilteredCars = useMemo(() => {
+    if (activeTab === "favorites") {
+      return sorted.filter((car) => car.isFavorite);
+    }
+    return sorted;
+  }, [activeTab, sorted]);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -263,7 +272,7 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <StatsBar cars={sorted} total={cars.length} />
+            <StatsBar cars={tabFilteredCars} total={cars.length} />
             {hasFilters && (
               <button
                 onClick={clearAll}
@@ -287,13 +296,38 @@ export default function Dashboard() {
         )}
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                activeTab === "all"
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              Все ({sorted.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("favorites")}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                activeTab === "favorites"
+                  ? "border-amber-300 bg-amber-50 text-amber-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              Избранное ({sorted.filter((car) => car.isFavorite).length})
+            </button>
+          </div>
           <CarTable
-            cars={sorted}
+            cars={tabFilteredCars}
             sortKey={sortKey}
             sortDir={sortDir}
             selectedId={selectedId}
             onSort={handleSort}
             onSelectRow={(id) => setSelectedId((prev) => (prev === id ? null : id))}
+            onToggleFavorite={(id, isFavorite) =>
+              toggleFavoriteMutation.mutate({ id, isFavorite })
+            }
           />
         </div>
 

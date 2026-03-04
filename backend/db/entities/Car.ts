@@ -63,6 +63,9 @@ export class Car {
   @Column({ name: "is_new", type: "boolean", default: false })
   isNew!: boolean;
 
+  @Column({ name: "is_favorite", type: "boolean", default: false })
+  isFavorite!: boolean;
+
   @CreateDateColumn({ name: "created_at", type: "datetime" })
   createdAt!: Date;
 

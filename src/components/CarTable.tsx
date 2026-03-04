@@ -12,6 +12,7 @@ interface Props {
   selectedId: number | null;
   onSort: (key: SortKey) => void;
   onSelectRow: (id: number) => void;
+  onToggleFavorite: (id: number, isFavorite: boolean) => void;
 }
 
 const COLUMNS: { key: SortKey; label: string }[] = [
@@ -200,7 +201,15 @@ function InspectionModal({
   );
 }
 
-export default function CarTable({ cars, sortKey, sortDir, selectedId, onSort, onSelectRow }: Props) {
+export default function CarTable({
+  cars,
+  sortKey,
+  sortDir,
+  selectedId,
+  onSort,
+  onSelectRow,
+  onToggleFavorite,
+}: Props) {
   const [inspectionCar, setInspectionCar] = useState<Car | null>(null);
 
   return (
@@ -241,13 +250,14 @@ export default function CarTable({ cars, sortKey, sortDir, selectedId, onSort, o
             <th className="w-[250px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Обновлено</th>
             <th className="w-[220px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Статус кузова</th>
             <th className="w-[168px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Инспекция</th>
+            <th className="w-[90px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Избр.</th>
             <th className="w-[140px] px-4 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Ссылка</th>
           </tr>
         </thead>
         <tbody>
           {cars.length === 0 && (
             <tr>
-              <td colSpan={10} className="py-24 text-center text-base text-slate-400">
+              <td colSpan={11} className="py-24 text-center text-base text-slate-400">
                 Ничего не найдено
               </td>
             </tr>
@@ -377,6 +387,22 @@ export default function CarTable({ cars, sortKey, sortDir, selectedId, onSort, o
                       <div className="text-slate-400">—</div>
                     )}
                   </div>
+                </td>
+                <td className="w-[90px] whitespace-nowrap px-3 py-4">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleFavorite(car.id, !(car.isFavorite ?? false));
+                    }}
+                    className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border text-lg transition-colors ${
+                      car.isFavorite
+                        ? "border-amber-300 bg-amber-50 text-amber-500 hover:bg-amber-100"
+                        : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-600"
+                    }`}
+                    title={car.isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+                  >
+                    {car.isFavorite ? "★" : "☆"}
+                  </button>
                 </td>
                 <td className="whitespace-nowrap px-4 py-4">
                   <button

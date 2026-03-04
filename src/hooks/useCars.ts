@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import type { Car } from "../types/car";
 import { queryKeys } from "../api/queryKeys";
@@ -28,5 +28,23 @@ export function useCars() {
   return useQuery({
     queryKey: queryKeys.cars,
     queryFn: fetchCars,
+  });
+}
+
+interface ToggleFavoriteInput {
+  id: number;
+  isFavorite: boolean;
+}
+
+export function useToggleFavorite() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, isFavorite }: ToggleFavoriteInput) => {
+      await api.post(`/cars/${id}/favorite`, { isFavorite });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.cars });
+    },
   });
 }

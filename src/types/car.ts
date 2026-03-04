@@ -15,6 +15,7 @@ export interface Car {
   sourceId?: string;
   isActive?: boolean;
   isNew?: boolean;
+  isFavorite?: boolean;
   year: number;
   mileageKm: number;
   price: number;

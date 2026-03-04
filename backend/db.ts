@@ -15,6 +15,7 @@ export interface CarRow {
   sourceId: string;
   isActive: boolean;
   isNew: boolean;
+  isFavorite: boolean;
   year: number;
   mileageKm: number;
   price: number;
@@ -91,6 +92,7 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
           modifiedDate: parsed.modifiedDate,
           isActive: true,
           isNew: true,
+          isFavorite: false,
           lastSeenAt: syncSeenAt,
         });
       } else {
@@ -168,6 +170,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
     .addSelect("c.source_id", "source_id")
     .addSelect("c.is_active", "is_active")
     .addSelect("c.is_new", "is_new")
+    .addSelect("c.is_favorite", "is_favorite")
     .addSelect("c.year", "year")
     .addSelect("c.mileage_km", "mileage_km")
     .addSelect("c.price_won", "price_won")
@@ -187,6 +190,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       source_id: string;
       is_active: number;
       is_new: number;
+      is_favorite: number;
       year: number;
       mileage_km: number;
       price_won: string;
@@ -236,6 +240,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       sourceId: row.source_id,
       isActive: Boolean(row.is_active),
       isNew: Boolean(row.is_new),
+      isFavorite: Boolean(row.is_favorite),
       year: row.year,
       mileageKm: row.mileage_km,
       price: currentPriceEur,
@@ -269,4 +274,11 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       ? new Date(maxUpdated.updatedAt).toISOString()
       : new Date(0).toISOString(),
   };
+}
+
+export async function setCarFavorite(carId: number, isFavorite: boolean) {
+  await initializeDatabase();
+  const carRepo = AppDataSource.getRepository(Car);
+  const result = await carRepo.update({ id: carId }, { isFavorite });
+  return result.affected === 1;
 }
