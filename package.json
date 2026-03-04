@@ -4,11 +4,18 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node fetchEncar.js && vite",
+    "dev": "vite",
+    "backend": "npm --prefix backend run dev",
+    "backend:build": "npm --prefix backend run build",
+    "backend:start": "npm --prefix backend run start",
+    "db:up": "docker compose up -d mysql",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f mysql",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

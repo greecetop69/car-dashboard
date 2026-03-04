@@ -1,217 +1,306 @@
-import { useState } from "react";
-import type { SortKey, SortDir } from "../types/car";
+import { useQueries } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { queryKeys } from "../api/queryKeys";
+import { fetchInspection } from "../hooks/useInspection";
+import { useCars } from "../hooks/useCars";
+import type { SortDir, SortKey } from "../types/car";
+import { compareByCaromotoPrice } from "../utils/caromoto";
 import {
-    MIN_YEAR,
-    MAX_YEAR,
-    MIN_MILE,
-    MAX_MILE,
-    MIN_PRICE,
-    MAX_PRICE,
-} from "../data/cars";
+  getDamageConditionKey,
+  getInspectionIdCandidates,
+  type DamageConditionKey,
+} from "../utils/inspectionCondition";
 import { fmtEur, fmtKm } from "../utils/format";
-import RangeFilter from "./RangeFilter";
 import CarTable from "./CarTable";
+import RangeFilter from "./RangeFilter";
 import StatsBar from "./StatsBar";
-import { CARS } from "../data/cars";
+
+const DAMAGE_FILTER_OPTIONS: Array<{
+  key: "all" | DamageConditionKey;
+  label: string;
+  activeClass: string;
+}> = [
+  { key: "all", label: "Все", activeClass: "border-blue-300 bg-blue-50 text-blue-700" },
+  { key: "clean", label: "Не бита", activeClass: "border-emerald-300 bg-emerald-50 text-emerald-700" },
+  { key: "repair", label: "Бита (ремонт)", activeClass: "border-amber-300 bg-amber-50 text-amber-700" },
+  { key: "replace", label: "Бита (замена)", activeClass: "border-orange-300 bg-orange-50 text-orange-700" },
+  {
+    key: "replaceRepair",
+    label: "Бита (замена + ремонт)",
+    activeClass: "border-red-300 bg-red-50 text-red-700",
+  },
+  { key: "notFound", label: "Нет отчета", activeClass: "border-slate-300 bg-slate-100 text-slate-700" },
+];
 
 export default function Dashboard() {
-    // ── Фильтры ───────────────────────────────────────────────────────────────
-    const [search, setSearch] = useState("");
-    const [yearRange, setYearRange] = useState<[number, number]>([
-        MIN_YEAR,
-        MAX_YEAR,
-    ]);
-    const [mileRange, setMileRange] = useState<[number, number]>([
-        MIN_MILE,
-        MAX_MILE,
-    ]);
-    const [priceRange, setPriceRange] = useState<[number, number]>([
-        MIN_PRICE,
-        MAX_PRICE,
-    ]);
+  const { data, isPending, isError } = useCars();
 
-    // ── Сортировка ────────────────────────────────────────────────────────────
-    const [sortKey, setSortKey] = useState<SortKey | null>(null);
-    const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const cars = data?.cars ?? [];
+  const limits = {
+    minYear: data?.meta?.minYear ?? 0,
+    maxYear: data?.meta?.maxYear ?? 0,
+    minMileage: data?.meta?.minMileage ?? 0,
+    maxMileage: data?.meta?.maxMileage ?? 0,
+    minPrice: data?.meta?.minPrice ?? 0,
+    maxPrice: data?.meta?.maxPrice ?? 0,
+  };
 
-    // ── Выделение строки ──────────────────────────────────────────────────────
-    const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [yearRange, setYearRange] = useState<[number, number]>([0, 0]);
+  const [mileRange, setMileRange] = useState<[number, number]>([0, 0]);
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [damageFilter, setDamageFilter] = useState<"all" | DamageConditionKey>("all");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
-    // ── Фильтрация ────────────────────────────────────────────────────────────
-    const filtered = CARS.filter((c) => {
-        const q = search.toLowerCase();
-        if (
-            q &&
-            ![
-                String(c.year),
-                String(c.mileageKm),
-                c.badge,
-                c.modifiedDate,
-            ].some((v) => v.toLowerCase().includes(q))
-        )
-            return false;
-        if (c.year < yearRange[0] || c.year > yearRange[1]) return false;
-        if (c.mileageKm < mileRange[0] || c.mileageKm > mileRange[1])
-            return false;
-        if (c.price < priceRange[0] || c.price > priceRange[1]) return false;
-        return true;
+  const inspectionCars = useMemo(() => cars.filter((car) => car.hasInspection), [cars]);
+  const inspectionQueries = useQueries({
+    queries:
+      damageFilter === "all"
+        ? []
+        : inspectionCars.map((car) => {
+            const ids = getInspectionIdCandidates(car);
+            const primaryId = ids[0] ?? null;
+            const fallbackIds = ids.slice(1);
+
+            return {
+              queryKey:
+                primaryId != null
+                  ? queryKeys.inspection(primaryId, fallbackIds)
+                  : ["inspection", "none", car.id],
+              queryFn: () => fetchInspection(primaryId as number, fallbackIds),
+              enabled: primaryId != null,
+            };
+          }),
+  });
+
+  const conditionByCarId = useMemo(() => {
+    const map = new Map<number, DamageConditionKey>();
+    if (damageFilter === "all") return map;
+
+    let queryIndex = 0;
+    for (const car of cars) {
+      if (!car.hasInspection) {
+        map.set(car.id, "notFound");
+        continue;
+      }
+
+      const query = inspectionQueries[queryIndex];
+      queryIndex += 1;
+      if (query?.data) {
+        map.set(car.id, getDamageConditionKey(query.data));
+      }
+    }
+
+    return map;
+  }, [cars, damageFilter, inspectionQueries]);
+
+  useEffect(() => {
+    setYearRange([limits.minYear, limits.maxYear]);
+    setMileRange([limits.minMileage, limits.maxMileage]);
+    setPriceRange([limits.minPrice, limits.maxPrice]);
+  }, [
+    limits.minYear,
+    limits.maxYear,
+    limits.minMileage,
+    limits.maxMileage,
+    limits.minPrice,
+    limits.maxPrice,
+  ]);
+
+  const readyForFilters = useMemo(() => {
+    return limits.maxYear > 0 && limits.maxMileage >= 0 && limits.maxPrice >= 0;
+  }, [limits.maxYear, limits.maxMileage, limits.maxPrice]);
+
+  const filtered = useMemo(() => {
+    return cars.filter((c) => {
+      const q = search.trim().toLowerCase();
+      if (q) {
+        const qDigits = q.replace(/\D/g, "");
+        const textFields = [String(c.year), String(c.mileageKm), c.modifiedDate];
+        const numberFields = [String(c.price), String(c.priceWon)];
+
+        const byText = textFields.some((v) => v.toLowerCase().includes(q));
+        const byDigits =
+          qDigits.length > 0 &&
+          numberFields.some((v) => v.replace(/\D/g, "").includes(qDigits));
+
+        if (!byText && !byDigits) return false;
+      }
+      if (c.year < yearRange[0] || c.year > yearRange[1]) return false;
+      if (c.mileageKm < mileRange[0] || c.mileageKm > mileRange[1]) return false;
+      if (c.price < priceRange[0] || c.price > priceRange[1]) return false;
+      if (damageFilter !== "all") {
+        const condition = conditionByCarId.get(c.id);
+        if (!condition || condition !== damageFilter) return false;
+      }
+      return true;
     });
+  }, [cars, search, yearRange, mileRange, priceRange, damageFilter, conditionByCarId]);
 
-    // ── Сортировка ────────────────────────────────────────────────────────────
-    const sorted = sortKey
-        ? [...filtered].sort((a, b) => {
-              const va = a[sortKey],
-                  vb = b[sortKey];
-              const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-              return sortDir === "asc" ? cmp : -cmp;
-          })
-        : filtered;
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
 
-    function handleSort(key: SortKey) {
-        if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        else {
-            setSortKey(key);
-            setSortDir("asc");
-        }
+    return [...filtered].sort((a, b) => {
+      if (sortKey === "caromotoPrice") {
+        return compareByCaromotoPrice(a, b, sortDir);
+      }
+
+      const va = a[sortKey];
+      const vb = b[sortKey];
+      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      return;
     }
+    setSortKey(key);
+    setSortDir("asc");
+  }
 
-    // ── Сброс фильтров ────────────────────────────────────────────────────────
-    const hasFilters =
-        search ||
-        yearRange[0] !== MIN_YEAR ||
-        yearRange[1] !== MAX_YEAR ||
-        mileRange[0] !== MIN_MILE ||
-        mileRange[1] !== MAX_MILE ||
-        priceRange[0] !== MIN_PRICE ||
-        priceRange[1] !== MAX_PRICE;
+  const hasFilters =
+    search ||
+    damageFilter !== "all" ||
+    yearRange[0] !== limits.minYear ||
+    yearRange[1] !== limits.maxYear ||
+    mileRange[0] !== limits.minMileage ||
+    mileRange[1] !== limits.maxMileage ||
+    priceRange[0] !== limits.minPrice ||
+    priceRange[1] !== limits.maxPrice;
 
-    function clearAll() {
-        setSearch("");
-        setYearRange([MIN_YEAR, MAX_YEAR]);
-        setMileRange([MIN_MILE, MAX_MILE]);
-        setPriceRange([MIN_PRICE, MAX_PRICE]);
-    }
+  function clearAll() {
+    setSearch("");
+    setDamageFilter("all");
+    setYearRange([limits.minYear, limits.maxYear]);
+    setMileRange([limits.minMileage, limits.maxMileage]);
+    setPriceRange([limits.minPrice, limits.maxPrice]);
+  }
 
-    return (
-        <div className="min-h-screen bg-slate-50">
-            <div className="max-w-6xl mx-auto px-4 py-10">
-                {/* Заголовок */}
-                <div className="mb-7">
-                    <div className="flex items-center gap-2.5 mb-1">
-                        <svg
-                            width="22"
-                            height="22"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="#3b82f6"
-                            strokeWidth="2"
-                        >
-                            <rect x="1" y="8" width="22" height="10" rx="2" />
-                            <path d="M5 8V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2" />
-                            <circle cx="7" cy="18" r="2" />
-                            <circle cx="17" cy="18" r="2" />
-                        </svg>
-                        <h1 className="text-2xl font-semibold text-slate-800 tracking-tight">
-                            Audi A3 — подбор
-                        </h1>
-                    </div>
-                    <p className="text-sm text-slate-400 ml-8">
-                        База объявлений с фильтрами и сортировкой
-                    </p>
-                </div>
-
-                {/* Фильтры */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-4 space-y-5">
-                    {/* Поиск */}
-                    <div className="relative">
-                        <svg
-                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                        >
-                            <circle cx="11" cy="11" r="8" />
-                            <path d="m21 21-4.35-4.35" />
-                        </svg>
-                        <input
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Поиск по году, пробегу, комплектации…"
-                            className="w-full pl-9 pr-9 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white transition text-slate-700 placeholder-slate-400"
-                        />
-                        {search && (
-                            <button
-                                onClick={() => setSearch("")}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-lg leading-none"
-                            >
-                                ×
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="h-px bg-slate-100" />
-
-                    {/* Слайдеры */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                        <RangeFilter
-                            label="Год"
-                            min={MIN_YEAR}
-                            max={MAX_YEAR}
-                            value={yearRange}
-                            onChange={setYearRange}
-                        />
-                        <RangeFilter
-                            label="Пробег"
-                            min={MIN_MILE}
-                            max={MAX_MILE}
-                            value={mileRange}
-                            onChange={setMileRange}
-                            format={fmtKm}
-                        />
-                        <RangeFilter
-                            label="Цена €"
-                            min={MIN_PRICE}
-                            max={MAX_PRICE}
-                            value={priceRange}
-                            onChange={setPriceRange}
-                            format={fmtEur}
-                        />
-                    </div>
-
-                    <div className="h-px bg-slate-100" />
-
-                    {/* Статистика + сброс */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <StatsBar cars={sorted} total={CARS.length} />
-                        {hasFilters && (
-                            <button
-                                onClick={clearAll}
-                                className="text-xs text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors"
-                            >
-                                Сбросить все фильтры
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* Таблица */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <CarTable
-                        cars={sorted}
-                        sortKey={sortKey}
-                        sortDir={sortDir}
-                        selectedId={selectedId}
-                        onSort={handleSort}
-                        onSelectRow={(id) =>
-                            setSelectedId((prev) => (prev === id ? null : id))
-                        }
-                    />
-                </div>
-
-                <p className="text-center text-xs text-slate-400 mt-6">
-                    Audi A3 · {CARS.length} объявлений
-                </p>
-            </div>
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-[1680px] px-5 py-10">
+        <div className="mb-7">
+          <div className="mb-1 flex items-center gap-2.5">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-800">
+              Audi A3 - подбор
+            </h1>
+          </div>
+          <p className="ml-1 text-sm text-slate-400">
+            База объявлений с фильтрами и сортировкой
+          </p>
         </div>
-    );
+
+        <div className="mb-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="relative">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по году, пробегу, дате обновления..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-3 pr-9 text-sm text-slate-700 placeholder-slate-400 transition focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-lg leading-none text-slate-400 hover:text-slate-700"
+              >
+                x
+              </button>
+            )}
+          </div>
+
+          <div className="h-px bg-slate-100" />
+
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+            <RangeFilter
+              label="Год"
+              min={limits.minYear}
+              max={limits.maxYear}
+              value={yearRange}
+              onChange={setYearRange}
+              disabled={!readyForFilters}
+            />
+            <RangeFilter
+              label="Пробег"
+              min={limits.minMileage}
+              max={limits.maxMileage}
+              value={mileRange}
+              onChange={setMileRange}
+              format={fmtKm}
+              disabled={!readyForFilters}
+            />
+            <RangeFilter
+              label="Цена €"
+              min={limits.minPrice}
+              max={limits.maxPrice}
+              value={priceRange}
+              onChange={setPriceRange}
+              format={fmtEur}
+              disabled={!readyForFilters}
+            />
+          </div>
+
+          <div className="h-px bg-slate-100" />
+
+          <div className="flex flex-wrap items-center gap-2">
+            {DAMAGE_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                onClick={() => setDamageFilter(option.key)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                  damageFilter === option.key
+                    ? option.activeClass
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <StatsBar cars={sorted} total={cars.length} />
+            {hasFilters && (
+              <button
+                onClick={clearAll}
+                className="text-xs text-blue-500 underline underline-offset-2 transition-colors hover:text-blue-700"
+              >
+                Сбросить все фильтры
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isPending && (
+          <div className="px-1 pb-3 text-sm text-slate-500">
+            Загрузка данных с backend...
+          </div>
+        )}
+        {isError && (
+          <div className="px-1 pb-3 text-sm text-red-600">
+            Не удалось загрузить данные с backend API
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <CarTable
+            cars={sorted}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            selectedId={selectedId}
+            onSort={handleSort}
+            onSelectRow={(id) => setSelectedId((prev) => (prev === id ? null : id))}
+          />
+        </div>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          Audi A3 · {cars.length} объявлений
+        </p>
+      </div>
+    </div>
+  );
 }

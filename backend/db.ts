@@ -1,0 +1,276 @@
+import { AppDataSource } from "./db/data-source.js";
+import { Car } from "./db/entities/Car.js";
+import { CarPriceHistory } from "./db/entities/CarPriceHistory.js";
+import type { ParsedCarRecord } from "./encarService.js";
+import { In } from "typeorm";
+
+export interface PriceHistoryRow {
+  priceWon: number;
+  priceEur: number;
+  recordedAt: string;
+}
+
+export interface CarRow {
+  id: number;
+  sourceId: string;
+  isActive: boolean;
+  isNew: boolean;
+  year: number;
+  mileageKm: number;
+  price: number;
+  priceWon: number;
+  url: string;
+  inspectionUrl: string;
+  diagnosisUrl: string;
+  accidentUrl: string;
+  hasInspection: boolean;
+  mainPhoto: string | null;
+  photos: ParsedCarRecord["photos"];
+  badge: string;
+  modifiedDate: string;
+  previousPriceWon: number | null;
+  priceDeltaWon: number;
+  priceTrend: "up" | "down" | "same";
+  priceHistory: PriceHistoryRow[];
+}
+
+export interface CarsApiResponse {
+  cars: CarRow[];
+  meta: {
+    count: number;
+    minYear: number;
+    maxYear: number;
+    minMileage: number;
+    maxMileage: number;
+    minPrice: number;
+    maxPrice: number;
+  };
+  updatedAt: string;
+}
+
+export async function initializeDatabase() {
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+}
+
+export async function runMigrations() {
+  await initializeDatabase();
+  await AppDataSource.runMigrations();
+}
+
+export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
+  await initializeDatabase();
+  const syncSeenAt = new Date();
+
+  await AppDataSource.transaction(async (manager) => {
+    const carRepo = manager.getRepository(Car);
+    const historyRepo = manager.getRepository(CarPriceHistory);
+    const seenSourceIds: string[] = [];
+
+    for (const parsed of parsedCars) {
+      seenSourceIds.push(parsed.sourceId);
+      let car = await carRepo.findOne({
+        where: { sourceId: parsed.sourceId },
+      });
+
+      if (!car) {
+        car = carRepo.create({
+          sourceId: parsed.sourceId,
+          year: parsed.year,
+          mileageKm: parsed.mileageKm,
+          priceEur: parsed.price,
+          priceWon: String(parsed.priceWon),
+          url: parsed.url,
+          inspectionUrl: parsed.inspectionUrl,
+          diagnosisUrl: parsed.diagnosisUrl,
+          accidentUrl: parsed.accidentUrl,
+          hasInspection: parsed.hasInspection,
+          mainPhoto: parsed.mainPhoto,
+          photosJson: parsed.photos,
+          badge: parsed.badge,
+          modifiedDate: parsed.modifiedDate,
+          isActive: true,
+          isNew: true,
+          lastSeenAt: syncSeenAt,
+        });
+      } else {
+        car.year = parsed.year;
+        car.mileageKm = parsed.mileageKm;
+        car.priceEur = parsed.price;
+        car.priceWon = String(parsed.priceWon);
+        car.url = parsed.url;
+        car.inspectionUrl = parsed.inspectionUrl;
+        car.diagnosisUrl = parsed.diagnosisUrl;
+        car.accidentUrl = parsed.accidentUrl;
+        car.hasInspection = parsed.hasInspection;
+        car.mainPhoto = parsed.mainPhoto;
+        car.photosJson = parsed.photos;
+        car.badge = parsed.badge;
+        car.modifiedDate = parsed.modifiedDate;
+        car.isActive = true;
+        car.isNew = false;
+        car.lastSeenAt = syncSeenAt;
+      }
+
+      car = await carRepo.save(car);
+
+      const lastHistory = await historyRepo.findOne({
+        where: { carId: car.id },
+        order: { recordedAt: "DESC" },
+      });
+
+      if (!lastHistory || Number(lastHistory.priceWon) !== parsed.priceWon) {
+        const history = historyRepo.create({
+          carId: car.id,
+          priceEur: parsed.price,
+          priceWon: String(parsed.priceWon),
+        });
+        await historyRepo.save(history);
+      }
+    }
+
+    if (seenSourceIds.length > 0) {
+      await manager
+        .createQueryBuilder()
+        .update(Car)
+        .set({ isActive: false })
+        .where("source_id NOT IN (:...sourceIds)", { sourceIds: seenSourceIds })
+        .andWhere("is_active = :isActive", { isActive: true })
+        .execute();
+    }
+  });
+}
+
+function buildMeta(cars: CarRow[]) {
+  const years = cars.map((c) => c.year).filter(Boolean);
+  const mileages = cars.map((c) => c.mileageKm);
+  const prices = cars.map((c) => c.price);
+
+  return {
+    count: cars.length,
+    minYear: years.length ? Math.min(...years) : 0,
+    maxYear: years.length ? Math.max(...years) : 0,
+    minMileage: mileages.length ? Math.min(...mileages) : 0,
+    maxMileage: mileages.length ? Math.max(...mileages) : 0,
+    minPrice: prices.length ? Math.min(...prices) : 0,
+    maxPrice: prices.length ? Math.max(...prices) : 0,
+  };
+}
+
+export async function getCarsFromDb(): Promise<CarsApiResponse> {
+  await initializeDatabase();
+
+  const carRepo = AppDataSource.getRepository(Car);
+  const historyRepo = AppDataSource.getRepository(CarPriceHistory);
+
+  const rows = await carRepo
+    .createQueryBuilder("c")
+    .select("c.id", "id")
+    .addSelect("c.source_id", "source_id")
+    .addSelect("c.is_active", "is_active")
+    .addSelect("c.is_new", "is_new")
+    .addSelect("c.year", "year")
+    .addSelect("c.mileage_km", "mileage_km")
+    .addSelect("c.price_eur", "price_eur")
+    .addSelect("c.price_won", "price_won")
+    .addSelect("c.url", "url")
+    .addSelect("c.inspection_url", "inspection_url")
+    .addSelect("c.diagnosis_url", "diagnosis_url")
+    .addSelect("c.accident_url", "accident_url")
+    .addSelect("c.has_inspection", "has_inspection")
+    .addSelect("c.main_photo", "main_photo")
+    .addSelect("c.photos_json", "photos_json")
+    .addSelect("c.badge", "badge")
+    .addSelect("c.modified_date", "modified_date")
+    .orderBy("c.price_eur", "ASC")
+    .addOrderBy("c.id", "ASC")
+    .getRawMany<{
+      id: number;
+      source_id: string;
+      is_active: number;
+      is_new: number;
+      year: number;
+      mileage_km: number;
+      price_eur: number;
+      price_won: string;
+      url: string;
+      inspection_url: string;
+      diagnosis_url: string;
+      accident_url: string;
+      has_inspection: number;
+      main_photo: string | null;
+      photos_json: ParsedCarRecord["photos"] | string;
+      badge: string;
+      modified_date: string;
+    }>();
+
+  const carIds = rows.map((row) => row.id);
+  const historyRows = carIds.length
+    ? await historyRepo.find({
+        where: { carId: In(carIds) },
+        order: { carId: "ASC", recordedAt: "DESC" },
+      })
+    : [];
+
+  const historyByCarId = new Map<number, PriceHistoryRow[]>();
+  for (const history of historyRows) {
+    const existing = historyByCarId.get(history.carId) ?? [];
+    existing.push({
+      priceWon: Number(history.priceWon),
+      priceEur: history.priceEur,
+      recordedAt: history.recordedAt.toISOString(),
+    });
+    historyByCarId.set(history.carId, existing);
+  }
+
+  const cars: CarRow[] = rows.map((row) => {
+    const priceHistory = historyByCarId.get(row.id) ?? [];
+    const previousPriceWon = priceHistory[1]?.priceWon ?? null;
+    const currentPriceWon = Number(row.price_won);
+    const priceDeltaWon =
+      previousPriceWon == null ? 0 : currentPriceWon - previousPriceWon;
+    const photos =
+      typeof row.photos_json === "string"
+        ? (JSON.parse(row.photos_json) as ParsedCarRecord["photos"])
+        : (row.photos_json as ParsedCarRecord["photos"]);
+
+    return {
+      id: row.id,
+      sourceId: row.source_id,
+      isActive: Boolean(row.is_active),
+      isNew: Boolean(row.is_new),
+      year: row.year,
+      mileageKm: row.mileage_km,
+      price: row.price_eur,
+      priceWon: currentPriceWon,
+      url: row.url,
+      inspectionUrl: row.inspection_url,
+      diagnosisUrl: row.diagnosis_url,
+      accidentUrl: row.accident_url,
+      hasInspection: Boolean(row.has_inspection),
+      mainPhoto: row.main_photo,
+      photos,
+      badge: row.badge,
+      modifiedDate: row.modified_date,
+      previousPriceWon,
+      priceDeltaWon,
+      priceTrend:
+        priceDeltaWon > 0 ? "up" : priceDeltaWon < 0 ? "down" : "same",
+      priceHistory,
+    };
+  });
+
+  const maxUpdated = await carRepo
+    .createQueryBuilder("c")
+    .select("MAX(c.updated_at)", "updatedAt")
+    .getRawOne<{ updatedAt: Date | null }>();
+
+  return {
+    cars,
+    meta: buildMeta(cars),
+    updatedAt: maxUpdated?.updatedAt
+      ? new Date(maxUpdated.updatedAt).toISOString()
+      : new Date(0).toISOString(),
+  };
+}

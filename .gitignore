@@ -2,6 +2,9 @@
 /dist
 /node_modules
 /build
+/backend/dist
+/backend/node_modules
+/backend/.tmp
 /tmp
 /.idea
 /.vscode

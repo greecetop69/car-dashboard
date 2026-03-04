@@ -5,6 +5,7 @@ interface Props {
   value: [number, number];
   onChange: (v: [number, number]) => void;
   format?: (n: number) => string;
+  disabled?: boolean;
 }
 
 export default function RangeFilter({
@@ -14,6 +15,7 @@ export default function RangeFilter({
   value,
   onChange,
   format = String,
+  disabled = false,
 }: Props) {
   return (
     <div className="flex flex-col gap-2">
@@ -31,6 +33,7 @@ export default function RangeFilter({
           min={min}
           max={max}
           value={value[0]}
+          disabled={disabled}
           onChange={(e) =>
             onChange([Math.min(+e.target.value, value[1]), value[1]])
           }
@@ -41,6 +44,7 @@ export default function RangeFilter({
           min={min}
           max={max}
           value={value[1]}
+          disabled={disabled}
           onChange={(e) =>
             onChange([value[0], Math.max(+e.target.value, value[0])])
           }

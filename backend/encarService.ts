@@ -1,0 +1,197 @@
+interface RawPhoto {
+  type?: string;
+  location?: string;
+  updatedDate?: string;
+  ordering?: number;
+}
+
+interface RawCar {
+  Id?: string;
+  Badge?: string;
+  FormYear?: string;
+  Mileage?: number;
+  Price?: number;
+  ModifiedDate?: string;
+  Photos?: RawPhoto[];
+  Condition?: string[];
+}
+
+interface ApiSearchResponse {
+  SearchResults?: RawCar[];
+}
+
+export interface CarPhoto {
+  type: string;
+  location: string;
+  updatedDate: string;
+  ordering: number;
+}
+
+export interface ParsedCarRecord {
+  sourceId: string;
+  year: number;
+  mileageKm: number;
+  price: number;
+  priceWon: number;
+  url: string;
+  inspectionUrl: string;
+  diagnosisUrl: string;
+  accidentUrl: string;
+  hasInspection: boolean;
+  mainPhoto: string | null;
+  photos: CarPhoto[];
+  badge: string;
+  modifiedDate: string;
+}
+
+export interface ParsedCarsResponse {
+  cars: ParsedCarRecord[];
+  wonToEur: number;
+  updatedAt: string;
+}
+
+const SEARCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+  Referer: "https://www.encar.com/",
+  Origin: "https://www.encar.com",
+  Accept: "application/json",
+};
+
+const SEARCH_QUERY =
+  "(And.Hidden.N._.(C.CarType.N._.(C.Manufacturer.\uC544\uC6B0\uB514._.(C.ModelGroup.A3._.Model.\uB274 A3.)))_.Year.range(201700..)._.Price.range(..1400).)";
+
+const PAGE_SIZE: Record<string, number> = { premium: 20, general: 50 };
+const ENDPOINTS = ["premium", "general"];
+const PHOTO_BASE = "https://ci.encar.com";
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function toKishinevTime(modifiedDate?: string) {
+  if (!modifiedDate) return "";
+  try {
+    const dateStr = modifiedDate.replace(" +09", "+09:00");
+    return new Date(dateStr).toLocaleString("ru-RU", {
+      timeZone: "Europe/Chisinau",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function normalizeCar(car: RawCar) {
+  const photos = Array.isArray(car.Photos)
+    ? car.Photos.map((p) => ({
+        type: p.type ?? "",
+        location: PHOTO_BASE + (p.location ?? ""),
+        updatedDate: p.updatedDate ?? "",
+        ordering: p.ordering ?? 0,
+      }))
+    : [];
+
+  return {
+    sourceId: car.Id ?? "",
+    badge: car.Badge ?? "",
+    year: Number(car.FormYear) || 0,
+    mileageKm: car.Mileage ?? 0,
+    priceWon: (car.Price ?? 0) * 10000,
+    modifiedDate: toKishinevTime(car.ModifiedDate),
+    mainPhoto: photos[0]?.location ?? null,
+    photos,
+    hasInspection: (car.Condition ?? []).includes("Inspection"),
+  };
+}
+
+type NormalizedCar = ReturnType<typeof normalizeCar>;
+
+async function fetchOnePage(type: string, offset: number) {
+  const url = `https://api.encar.com/search/car/list/${type}`;
+  const params = new URLSearchParams({
+    count: "true",
+    q: SEARCH_QUERY,
+    sr: `|ModifiedDate|${offset}|${PAGE_SIZE[type]}`,
+  });
+
+  const response = await fetch(`${url}?${params.toString()}`, {
+    headers: SEARCH_HEADERS,
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} while fetching ${type}/${offset}`);
+  }
+
+  const data = (await response.json()) as ApiSearchResponse;
+  return data.SearchResults ?? [];
+}
+
+async function getWonToEurRate() {
+  const fallback = 0.00058;
+  try {
+    const response = await fetch("https://api.exchangerate-api.com/v4/latest/KRW");
+    if (!response.ok) return fallback;
+    const data = (await response.json()) as { rates?: { EUR?: number } };
+    return data?.rates?.EUR ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function deduplicate(cars: NormalizedCar[]) {
+  const seen = new Set<string>();
+  return cars.filter((car) => {
+    const key = `${car.year}_${car.mileageKm}_${car.priceWon}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function mapCars(cars: NormalizedCar[], wonToEur: number): ParsedCarRecord[] {
+  return cars.map((r) => ({
+    sourceId: r.sourceId,
+    year: r.year,
+    mileageKm: r.mileageKm,
+    price: Math.round(r.priceWon * wonToEur),
+    priceWon: r.priceWon,
+    url: `https://fem.encar.com/cars/detail/${r.sourceId}`,
+    inspectionUrl: `https://fem.encar.com/cars/report/inspect/${r.sourceId}`,
+    diagnosisUrl: `https://fem.encar.com/cars/report/diagnosis/${r.sourceId}`,
+    accidentUrl: `https://fem.encar.com/cars/report/accident/${r.sourceId}`,
+    hasInspection: r.hasInspection,
+    mainPhoto: r.mainPhoto,
+    photos: r.photos,
+    badge: r.badge,
+    modifiedDate: r.modifiedDate,
+  }));
+}
+
+export async function fetchEncarCars(): Promise<ParsedCarsResponse> {
+  const allCars: NormalizedCar[] = [];
+
+  for (const type of ENDPOINTS) {
+    let page = 0;
+    while (true) {
+      const offset = page * PAGE_SIZE[type];
+      const cars = await fetchOnePage(type, offset);
+      if (cars.length === 0) break;
+
+      allCars.push(...cars.map(normalizeCar));
+      if (cars.length < PAGE_SIZE[type]) break;
+
+      page += 1;
+      await sleep(1200);
+    }
+  }
+
+  const uniqueCars = deduplicate(allCars);
+  const wonToEur = await getWonToEurRate();
+  const mappedCars = mapCars(uniqueCars, wonToEur);
+
+  return {
+    cars: mappedCars,
+    wonToEur,
+    updatedAt: new Date().toISOString(),
+  };
+}

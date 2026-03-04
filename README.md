@@ -1,49 +1,80 @@
-# Audi A3 Car Dashboard
+# Car Dashboard
 
-React 19 + TypeScript + Tailwind CSS + Vite
+Проект состоит из:
+- `frontend` (React + Vite)
+- `backend` (Node 24 + парсер Encar + API)
+- `MySQL` в Docker для хранения машин и истории цен
 
-## Запуск
+## Почему MySQL
+
+Для этой задачи MySQL подходит хорошо:
+- простое и стабильное хранение табличных данных (`cars`, `car_price_history`);
+- удобные `UPSERT` через `ON DUPLICATE KEY UPDATE`;
+- легко поднять локально в Docker.
+
+## Быстрый старт
+
+1. Установить зависимости:
 
 ```bash
 npm install
+npm --prefix backend install
+```
+
+2. Поднять БД:
+
+```bash
+npm run db:up
+```
+
+3. Запустить backend:
+
+```bash
+npm run backend
+```
+
+4. Запустить frontend:
+
+```bash
 npm run dev
 ```
 
-Открыть http://localhost:5173
+Frontend: `http://localhost:5173`  
+Backend: `http://localhost:3001`
 
-## Структура проекта
+## Переменные backend
 
-```
-src/
-├── main.tsx                  # Точка входа
-├── App.tsx                   # Корневой компонент
-├── index.css                 # Tailwind + глобальные стили
-│
-├── types/
-│   └── car.ts                # Типы Car, ConditionType, SortKey, Filters
-│
-├── data/
-│   └── cars.ts               # Данные из Excel + классификация состояния
-│
-├── utils/
-│   ├── format.ts             # Форматирование чисел/цен/км
-│   ├── colorMap.ts           # Цвета свотчей
-│   └── conditionStyle.ts     # Tailwind-классы для бейджей состояния
-│
-└── components/
-    ├── Dashboard.tsx         # Главный компонент: состояние, фильтрация, сортировка
-    ├── CarTable.tsx          # Таблица с сортировкой
-    ├── FilterChips.tsx       # Чипы мультивыбора (состояние, цвет)
-    ├── RangeFilter.tsx       # Двойной range-слайдер
-    ├── StatsBar.tsx          # Статистика (кол-во, средняя цена/пробег)
-    └── BodyTooltip.tsx       # Попап кузова при наведении
+Пример в `backend/.env.example`:
+
+```env
+PORT=3001
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=car_user
+DB_PASSWORD=car_password
+DB_NAME=car_dashboard
 ```
 
-## Замена плейсхолдера в тултипе
+## API
 
-В `src/components/BodyTooltip.tsx` найди блок с комментарием  
-`{/* Image placeholder */}` и замени на:
+- `GET /api/cars`  
+  Читает данные из БД. Если БД пустая, backend сначала делает парсинг и сохраняет данные.
 
-```tsx
-<img src={`/damage/${car.id}.png`} alt="Схема повреждений" className="w-full h-28 object-contain rounded-xl" />
-```
+- `GET /api/cars?refresh=1`  
+  Форсирует новый парсинг и обновляет БД.
+
+- `POST /api/sync`  
+  Явный запуск парсинга и сохранения в БД.
+
+## История цен
+
+Backend хранит:
+- актуальную цену в `cars`;
+- историю изменений в `car_price_history`.
+
+Frontend получает вместе с машиной:
+- `previousPrice`
+- `priceDelta`
+- `priceTrend` (`up` | `down` | `same`)
+
+и показывает рост/падение цены в таблице.
