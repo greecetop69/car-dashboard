@@ -11,6 +11,7 @@
     "db:up": "docker compose up -d mysql",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f mysql",
+    "db:dump": "docker exec -e MYSQL_PWD=car_password car-dashboard-mysql mysqldump -ucar_user car_dashboard > db_dump.sql",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

@@ -1,14 +1,17 @@
 import type { Car } from "../types/car";
 
-export const CAROMOTO_ADDON_BY_YEAR: Record<number, number> = {
-  2020: 4511,
-  2019: 4698,
-  2018: 4910,
+export const CAROMOTO_FIXED_COSTS_EUR = 3680;
+
+export const CAROMOTO_CUSTOMS_BY_YEAR: Record<number, number> = {
+  2020: 1978,
+  2019: 2171,
+  2018: 2383,
 };
 
 export function getCaromotoAddonByYear(year: number): number | null {
-  const addon = CAROMOTO_ADDON_BY_YEAR[year];
-  return addon ?? null;
+  const customs = CAROMOTO_CUSTOMS_BY_YEAR[year];
+  if (customs == null) return null;
+  return CAROMOTO_FIXED_COSTS_EUR + customs;
 }
 
 export function getCaromotoPriceEur(car: Pick<Car, "year" | "price">): number | null {
