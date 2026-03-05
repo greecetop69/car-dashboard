@@ -332,12 +332,12 @@ export default function CarTable({
       <table className="hidden w-full border-collapse text-base md:table">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50">
-            <th className="w-[180px] px-5 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Фото</th>
+            <th className="w-[180px] px-14 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Фото</th>
             {COLUMNS.map((col) => (
               <th
                 key={col.key}
                 onClick={() => onSort(col.key)}
-                className={`cursor-pointer select-none whitespace-nowrap px-4 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                className={`cursor-pointer select-none whitespace-nowrap px-5 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                   sortKey === col.key ? "text-blue-600" : "text-slate-400 hover:text-slate-700"
                 } ${
                   col.key === "year"
@@ -355,7 +355,7 @@ export default function CarTable({
             ))}
             <th
               onClick={() => onSort("caromotoPrice")}
-              className={`w-[190px] cursor-pointer select-none whitespace-nowrap px-4 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+              className={`w-[190px] cursor-pointer select-none whitespace-nowrap px-3 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                 sortKey === "caromotoPrice" ? "text-blue-600" : "text-slate-400 hover:text-slate-700"
               }`}
             >
@@ -366,7 +366,7 @@ export default function CarTable({
             <th className="w-[220px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Статус кузова</th>
             <th className="w-[168px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Инспекция</th>
             <th className="w-[90px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Избр.</th>
-            <th className="w-[140px] px-4 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Ссылка</th>
+            <th className="w-[140px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Ссылка</th>
           </tr>
         </thead>
         <tbody>
@@ -402,7 +402,7 @@ export default function CarTable({
                         : "cursor-pointer bg-slate-50/50 hover:bg-slate-100/70"
                 } ${isNew ? "ring-2 ring-inset ring-emerald-300/80" : ""}`}
               >
-                <td className="whitespace-nowrap px-5 py-3">
+                <td className="whitespace-nowrap px-3 py-3">
                   <div className="relative inline-flex">
                     {car.mainPhoto ? (
                       <img
@@ -435,16 +435,16 @@ export default function CarTable({
                     )}
                   </div>
                 </td>
-                <td className={`w-[90px] whitespace-nowrap px-4 py-4 text-right font-mono ${mutedText}`}>{car.year}</td>
-                <td className={`w-[210px] whitespace-nowrap px-4 py-4 text-right font-mono ${mutedText}`}>{fmtKm(car.mileageKm)}</td>
-                <td className={`w-[170px] whitespace-nowrap px-4 py-4 text-right font-mono font-semibold ${strongText}`}>{fmtEur(car.price)}</td>
-                <td className={`w-[210px] whitespace-nowrap px-4 py-4 text-right font-mono font-semibold ${strongText}`}>
+                <td className={`w-[90px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}>{car.year}</td>
+                <td className={`w-[210px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}>{fmtKm(car.mileageKm)}</td>
+                <td className={`w-[170px] whitespace-nowrap px-3 py-4 text-right font-mono font-semibold ${strongText}`}>{fmtEur(car.price)}</td>
+                <td className={`w-[210px] whitespace-nowrap px-3 py-4 text-right font-mono font-semibold ${strongText}`}>
                   <div className="flex flex-col items-end gap-1">
                     <span>{fmtWon(car.priceWon)}</span>
                     <PriceTrendWon car={car} />
                   </div>
                 </td>
-                <td className={`w-[190px] whitespace-nowrap px-4 py-4 text-right font-mono font-semibold ${strongText}`}>
+                <td className={`w-[190px] whitespace-nowrap px-3 py-4 text-right font-mono font-semibold ${strongText}`}>
                   {caromotoPrice != null ? fmtEur(caromotoPrice) : "—"}
                 </td>
                 <td className={`w-[250px] whitespace-nowrap px-3 py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}>
@@ -528,7 +528,7 @@ export default function CarTable({
                     {car.isFavorite ? "★" : "☆"}
                   </button>
                 </td>
-                <td className="whitespace-nowrap px-4 py-4">
+                <td className="whitespace-nowrap px-3 py-4">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
