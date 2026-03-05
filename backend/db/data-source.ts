@@ -11,13 +11,51 @@ import { AddInspectionCacheColumns2026030406000 } from "./migrations/20260304060
 import { AddInspectionConditionColumn2026030407000 } from "./migrations/2026030407000-AddInspectionConditionColumn.js";
 import { AddCarOrigin2026030501000 } from "./migrations/2026030501000-AddCarOrigin.js";
 
+function firstNonEmpty(...values: Array<string | undefined>) {
+  return values.find((value) => typeof value === "string" && value.trim().length > 0);
+}
+
+const connectionUrl = firstNonEmpty(
+  process.env.DATABASE_URL,
+  process.env.MYSQL_URL,
+  process.env.MYSQL_PUBLIC_URL,
+);
+
+let host = firstNonEmpty(process.env.DB_HOST, process.env.MYSQLHOST) ?? "127.0.0.1";
+let port = Number(firstNonEmpty(process.env.DB_PORT, process.env.MYSQLPORT) ?? 3306);
+let username = firstNonEmpty(process.env.DB_USER, process.env.MYSQLUSER) ?? "car_user";
+let password = firstNonEmpty(process.env.DB_PASSWORD, process.env.MYSQLPASSWORD) ?? "car_password";
+let database = firstNonEmpty(process.env.DB_NAME, process.env.MYSQLDATABASE) ?? "car_dashboard";
+
+if (connectionUrl) {
+  try {
+    const parsed = new URL(connectionUrl);
+    host = parsed.hostname || host;
+    port = parsed.port ? Number(parsed.port) : port;
+    username = parsed.username ? decodeURIComponent(parsed.username) : username;
+    password = parsed.password ? decodeURIComponent(parsed.password) : password;
+    const parsedDbName = parsed.pathname.replace(/^\//, "").trim();
+    if (parsedDbName) {
+      database = parsedDbName;
+    }
+  } catch (error) {
+    console.warn("Invalid database URL, fallback to DB_* variables", error);
+  }
+}
+
+const sslEnabled = ["1", "true", "yes"].includes((process.env.DB_SSL ?? "").toLowerCase());
+const sslRejectUnauthorized = ["1", "true", "yes"].includes(
+  (process.env.DB_SSL_REJECT_UNAUTHORIZED ?? "").toLowerCase(),
+);
+
 export const AppDataSource = new DataSource({
   type: "mysql",
-  host: process.env.DB_HOST || "127.0.0.1",
-  port: Number(process.env.DB_PORT || 3306),
-  username: process.env.DB_USER || "car_user",
-  password: process.env.DB_PASSWORD || "car_password",
-  database: process.env.DB_NAME || "car_dashboard",
+  host,
+  port,
+  username,
+  password,
+  database,
+  ...(sslEnabled ? { ssl: { rejectUnauthorized: sslRejectUnauthorized } } : {}),
   entities: [Car, CarPriceHistory],
   migrations: [
     InitCarsAndPriceHistory2026030401000,

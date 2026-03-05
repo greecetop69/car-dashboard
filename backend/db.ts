@@ -51,6 +51,21 @@ export interface CarsApiResponse {
   updatedAt: string;
 }
 
+function toBoolFlag(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "bigint") return value === 1n;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "y";
+  }
+  if (Buffer.isBuffer(value)) {
+    const raw = value.toString("utf8").trim();
+    return raw === "1";
+  }
+  return false;
+}
+
 function deriveInspectionCondition(rawSummary: unknown): CarRow["inspectionCondition"] {
   if (!rawSummary || typeof rawSummary !== "object") return null;
   const summary = rawSummary as {
@@ -302,9 +317,9 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       id: row.id,
       origin: row.origin === "kbcha" ? "kbcha" : "encar",
       sourceId: row.source_id,
-      isActive: Boolean(row.is_active),
-      isNew: Boolean(row.is_new),
-      isFavorite: Boolean(row.is_favorite),
+      isActive: toBoolFlag(row.is_active),
+      isNew: toBoolFlag(row.is_new),
+      isFavorite: toBoolFlag(row.is_favorite),
       year: row.year,
       mileageKm: row.mileage_km,
       price: currentPriceEur,
@@ -313,7 +328,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       inspectionUrl: row.inspection_url,
       diagnosisUrl: row.diagnosis_url,
       accidentUrl: row.accident_url,
-      hasInspection: Boolean(row.has_inspection),
+      hasInspection: toBoolFlag(row.has_inspection),
       inspectionCondition:
         row.inspection_condition ?? deriveInspectionCondition(row.inspection_summary_json),
       mainPhoto: row.main_photo,
