@@ -4,6 +4,7 @@ import { getCaromotoPriceEur } from "../utils/caromoto";
 import { fmtEur, fmtKm, fmtWon } from "../utils/format";
 import DamageBadge from "./car-table/DamageBadge";
 import InspectionModal from "./car-table/InspectionModal";
+import PriceHistoryModal from "./car-table/PriceHistoryModal";
 import PriceTrendWon from "./car-table/PriceTrendWon";
 import SortArrow from "./car-table/SortArrow";
 import Button from "./ui/Button";
@@ -50,6 +51,7 @@ export default function CarTable({
     onToggleFavorite,
 }: Props) {
     const [inspectionCar, setInspectionCar] = useState<Car | null>(null);
+    const [priceHistoryCar, setPriceHistoryCar] = useState<Car | null>(null);
     const getOriginBadge = (origin: Car["origin"]) =>
         origin === "kbcha"
             ? { label: "KBCHA", className: "bg-amber-300 text-amber-950" }
@@ -73,6 +75,13 @@ export default function CarTable({
                         ? "h-24 w-36"
                         : "h-24 w-32";
                     const showMobileDetails = car.origin !== "kbcha";
+                    const wonTrend = car.priceTrend ?? "same";
+                    const wonTrendClass =
+                        wonTrend === "up"
+                            ? "text-red-600"
+                            : wonTrend === "down"
+                              ? "text-emerald-600"
+                              : "text-slate-700";
 
                     return (
                         <div
@@ -150,9 +159,17 @@ export default function CarTable({
                                     <div className="mt-2 text-base font-semibold text-slate-800">
                                         {fmtEur(car.price)}
                                     </div>
-                                    <div className="text-sm font-semibold text-slate-700">
-                                        {fmtWon(car.priceWon)}
-                                    </div>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPriceHistoryCar(car);
+                                        }}
+                                        className={`inline-flex items-center gap-1 text-sm font-semibold ${wonTrendClass}`}
+                                    >
+                                        <span>{fmtWon(car.priceWon)}</span>
+                                        {wonTrend === "up" && <span>↑</span>}
+                                        {wonTrend === "down" && <span>↓</span>}
+                                    </button>
                                     <div className="mt-1 text-xs text-slate-400">
                                         {car.modifiedDate}
                                     </div>
@@ -470,6 +487,10 @@ export default function CarTable({
             <InspectionModal
                 car={inspectionCar}
                 onClose={() => setInspectionCar(null)}
+            />
+            <PriceHistoryModal
+                car={priceHistoryCar}
+                onClose={() => setPriceHistoryCar(null)}
             />
         </div>
     );
