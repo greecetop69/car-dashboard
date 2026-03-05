@@ -233,7 +233,6 @@ export default function CarTable({
           const caromotoPrice = getCaromotoPriceEur(car);
           const originBadge = getOriginBadge(car.origin);
           const mobilePhotoClass = isFavoritesView ? "h-24 w-36" : "h-24 w-32";
-          const desktopPhotoBox = isFavoritesView ? "h-24 w-56" : "h-24 w-48";
 
           return (
             <div
