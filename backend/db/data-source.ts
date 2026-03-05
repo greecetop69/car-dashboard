@@ -9,6 +9,7 @@ import { DropPriceEurColumns2026030404000 } from "./migrations/2026030404000-Dro
 import { AddCarFavoriteFlag2026030405000 } from "./migrations/2026030405000-AddCarFavoriteFlag.js";
 import { AddInspectionCacheColumns2026030406000 } from "./migrations/2026030406000-AddInspectionCacheColumns.js";
 import { AddInspectionConditionColumn2026030407000 } from "./migrations/2026030407000-AddInspectionConditionColumn.js";
+import { AddCarOrigin2026030501000 } from "./migrations/2026030501000-AddCarOrigin.js";
 
 export const AppDataSource = new DataSource({
   type: "mysql",
@@ -26,6 +27,7 @@ export const AppDataSource = new DataSource({
     AddCarFavoriteFlag2026030405000,
     AddInspectionCacheColumns2026030406000,
     AddInspectionConditionColumn2026030407000,
+    AddCarOrigin2026030501000,
   ],
   synchronize: false,
   logging: false,

@@ -2,7 +2,9 @@ import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { getCarsFromDb, runMigrations, saveParsedCars, setCarFavorite } from "./db.js";
 import { fetchEncarCars } from "./encarService.js";
+import { fetchKbchaCars } from "./kbchaService.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
+import type { CarOrigin } from "./carSources.js";
 
 const PORT = Number(process.env.PORT || 3001);
 
@@ -33,8 +35,12 @@ async function syncCars() {
   if (syncInFlight) return syncInFlight;
 
   syncInFlight = (async () => {
-    const parsed = await fetchEncarCars();
-    await saveParsedCars(parsed.cars);
+    const [encar, kbcha] = await Promise.all([fetchEncarCars(), fetchKbchaCars()]);
+    const deactivateOrigins: CarOrigin[] = [];
+    if (encar.cars.length > 0) deactivateOrigins.push("encar");
+    if (kbcha.cars.length > 0) deactivateOrigins.push("kbcha");
+
+    await saveParsedCars([...encar.cars, ...kbcha.cars], { deactivateOrigins });
   })().finally(() => {
     syncInFlight = null;
   });

@@ -19,6 +19,7 @@ export type InspectionConditionKey =
 
 export interface Car {
   id: number;
+  origin?: "encar" | "kbcha";
   sourceId?: string;
   isActive?: boolean;
   isNew?: boolean;
@@ -43,5 +44,5 @@ export interface Car {
   modifiedDate: string;
 }
 
-export type SortKey = "year" | "mileageKm" | "price" | "priceWon" | "caromotoPrice";
+export type SortKey = "sourceId" | "year" | "mileageKm" | "price" | "priceWon" | "caromotoPrice";
 export type SortDir = "asc" | "desc";

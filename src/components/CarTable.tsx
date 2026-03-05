@@ -10,6 +10,7 @@ interface Props {
   sortKey: SortKey | null;
   sortDir: SortDir;
   selectedId: number | null;
+  isFavoritesView?: boolean;
   onSort: (key: SortKey) => void;
   onSelectRow: (id: number) => void;
   onToggleFavorite: (id: number, isFavorite: boolean) => void;
@@ -206,11 +207,16 @@ export default function CarTable({
   sortKey,
   sortDir,
   selectedId,
+  isFavoritesView = false,
   onSort,
   onSelectRow,
   onToggleFavorite,
 }: Props) {
   const [inspectionCar, setInspectionCar] = useState<Car | null>(null);
+  const getOriginBadge = (origin: Car["origin"]) =>
+    origin === "kbcha"
+      ? { label: "KBCHA", className: "bg-amber-300 text-amber-950" }
+      : { label: "ENCAR", className: "bg-red-600 text-white" };
 
   return (
     <div className="w-full overflow-x-hidden">
@@ -225,6 +231,9 @@ export default function CarTable({
           const isNew = car.isNew === true;
           const isSelected = selectedId === car.id;
           const caromotoPrice = getCaromotoPriceEur(car);
+          const originBadge = getOriginBadge(car.origin);
+          const mobilePhotoClass = isFavoritesView ? "h-24 w-36" : "h-24 w-32";
+          const desktopPhotoBox = isFavoritesView ? "h-24 w-56" : "h-24 w-48";
 
           return (
             <div
@@ -246,7 +255,7 @@ export default function CarTable({
                     <img
                       src={car.mainPhoto}
                       alt="Фото"
-                      className="h-24 w-32 rounded-lg border border-slate-200 object-cover"
+                      className={`${mobilePhotoClass} rounded-lg border border-slate-200 object-cover`}
                       style={
                         isInactive
                           ? {
@@ -257,7 +266,7 @@ export default function CarTable({
                       }
                     />
                   ) : (
-                    <div className="flex h-24 w-32 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-400">
+                    <div className={`flex ${mobilePhotoClass} items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-xs text-slate-400`}>
                       нет фото
                     </div>
                   )}
@@ -271,6 +280,11 @@ export default function CarTable({
                       NEW
                     </span>
                   )}
+                  <span
+                    className={`absolute bottom-2 left-2 rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide ${originBadge.className}`}
+                  >
+                    {originBadge.label}
+                  </span>
                 </div>
 
                 <div className="min-w-0 flex-1">
@@ -332,12 +346,21 @@ export default function CarTable({
       <table className="hidden w-full border-collapse text-base md:table">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50">
-            <th className="w-[180px] px-14 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Фото</th>
+            <th className="w-[180px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">Фото</th>
+            <th
+              onClick={() => onSort("sourceId")}
+              className={`w-[90px] cursor-pointer select-none whitespace-nowrap px-3 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                sortKey === "sourceId" ? "text-blue-600" : "text-slate-400 hover:text-slate-700"
+              }`}
+            >
+              ID
+              <SortArrow active={sortKey === "sourceId"} dir={sortDir} />
+            </th>
             {COLUMNS.map((col) => (
               <th
                 key={col.key}
                 onClick={() => onSort(col.key)}
-                className={`cursor-pointer select-none whitespace-nowrap px-5 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                className={`cursor-pointer select-none whitespace-nowrap px-3 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                   sortKey === col.key ? "text-blue-600" : "text-slate-400 hover:text-slate-700"
                 } ${
                   col.key === "year"
@@ -372,7 +395,7 @@ export default function CarTable({
         <tbody>
           {cars.length === 0 && (
             <tr>
-              <td colSpan={11} className="py-24 text-center text-base text-slate-400">
+              <td colSpan={12} className="py-24 text-center text-base text-slate-400">
                 Ничего не найдено
               </td>
             </tr>
@@ -385,6 +408,7 @@ export default function CarTable({
             const mutedText = isInactive ? "text-slate-400" : "text-slate-700";
             const strongText = isInactive ? "text-slate-500" : "text-slate-800";
             const caromotoPrice = getCaromotoPriceEur(car);
+            const originBadge = getOriginBadge(car.origin);
 
             return (
               <tr
@@ -403,26 +427,24 @@ export default function CarTable({
                 } ${isNew ? "ring-2 ring-inset ring-emerald-300/80" : ""}`}
               >
                 <td className="whitespace-nowrap px-3 py-3">
-                  <div className="relative inline-flex">
+                  <div className={`relative overflow-hidden rounded-lg border border-slate-200 h-24 w-40`}>
                     {car.mainPhoto ? (
                       <img
                         src={car.mainPhoto}
                         alt="Фото"
-                        className="h-24 w-36 rounded-lg border border-slate-200 object-cover"
+                        className="h-full w-full object-cover"
                         style={
                           isInactive
-                            ? {
-                                filter: "grayscale(100%) contrast(75%) brightness(75%) saturate(50%)",
-                                opacity: 0.65,
-                              }
+                            ? { filter: "grayscale(100%) contrast(75%) brightness(75%) saturate(50%)", opacity: 0.65 }
                             : undefined
                         }
                       />
                     ) : (
-                      <div className="flex h-24 w-36 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-sm text-slate-300">
+                      <div className="flex h-full w-full items-center justify-center bg-slate-100 text-sm text-slate-300">
                         нет фото
                       </div>
                     )}
+
                     {isInactive && (
                       <span className="absolute left-2 top-2 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white shadow-sm">
                         КУПЛЕНА
@@ -433,8 +455,14 @@ export default function CarTable({
                         NEW
                       </span>
                     )}
+                    <span
+                      className={`absolute bottom-2 left-2 rounded-md px-2 py-0.5 text-[10px] font-bold tracking-wide shadow-sm ${originBadge.className}`}
+                    >
+                      {originBadge.label}
+                    </span>
                   </div>
                 </td>
+                <td className={`w-[90px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}>{car.sourceId ?? "—"}</td>
                 <td className={`w-[90px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}>{car.year}</td>
                 <td className={`w-[210px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}>{fmtKm(car.mileageKm)}</td>
                 <td className={`w-[170px] whitespace-nowrap px-3 py-4 text-right font-mono font-semibold ${strongText}`}>{fmtEur(car.price)}</td>
@@ -548,5 +576,3 @@ export default function CarTable({
     </div>
   );
 }
-
-

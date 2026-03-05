@@ -1,7 +1,7 @@
 import { AppDataSource } from "./db/data-source.js";
 import { Car } from "./db/entities/Car.js";
 import { CarPriceHistory } from "./db/entities/CarPriceHistory.js";
-import type { ParsedCarRecord } from "./encarService.js";
+import type { CarOrigin, ParsedCarRecord } from "./carSources.js";
 import { getWonToEurRate } from "./fx.js";
 import { In } from "typeorm";
 
@@ -12,6 +12,7 @@ export interface PriceHistoryRow {
 
 export interface CarRow {
   id: number;
+  origin: CarOrigin;
   sourceId: string;
   isActive: boolean;
   isNew: boolean;
@@ -77,23 +78,39 @@ export async function runMigrations() {
   await AppDataSource.runMigrations();
 }
 
-export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
+function dedupeParsedCarsByOriginSource(parsedCars: ParsedCarRecord[]) {
+  const map = new Map<string, ParsedCarRecord>();
+  for (const car of parsedCars) {
+    map.set(`${car.origin}:${car.sourceId}`, car);
+  }
+  return [...map.values()];
+}
+
+export async function saveParsedCars(
+  parsedCars: ParsedCarRecord[],
+  options?: { deactivateOrigins?: CarOrigin[] },
+) {
   await initializeDatabase();
   const syncSeenAt = new Date();
+  const uniqueParsedCars = dedupeParsedCarsByOriginSource(parsedCars);
+  const deactivateOrigins =
+    options?.deactivateOrigins?.filter((item, idx, arr) => arr.indexOf(item) === idx) ??
+    ["encar", "kbcha"];
 
   await AppDataSource.transaction(async (manager) => {
     const carRepo = manager.getRepository(Car);
     const historyRepo = manager.getRepository(CarPriceHistory);
-    const seenSourceIds: string[] = [];
+    const seenKeys: string[] = [];
 
-    for (const parsed of parsedCars) {
-      seenSourceIds.push(parsed.sourceId);
+    for (const parsed of uniqueParsedCars) {
+      seenKeys.push(`${parsed.origin}:${parsed.sourceId}`);
       let car = await carRepo.findOne({
-        where: { sourceId: parsed.sourceId },
+        where: { origin: parsed.origin, sourceId: parsed.sourceId },
       });
 
       if (!car) {
         car = carRepo.create({
+          origin: parsed.origin,
           sourceId: parsed.sourceId,
           year: parsed.year,
           mileageKm: parsed.mileageKm,
@@ -103,6 +120,8 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
           diagnosisUrl: parsed.diagnosisUrl,
           accidentUrl: parsed.accidentUrl,
           hasInspection: parsed.hasInspection,
+          inspectionCondition:
+            parsed.inspectionCondition !== undefined ? parsed.inspectionCondition : null,
           mainPhoto: parsed.mainPhoto,
           photosJson: parsed.photos,
           badge: parsed.badge,
@@ -113,6 +132,7 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
           lastSeenAt: syncSeenAt,
         });
       } else {
+        car.origin = parsed.origin;
         car.year = parsed.year;
         car.mileageKm = parsed.mileageKm;
         car.priceWon = String(parsed.priceWon);
@@ -121,6 +141,9 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
         car.diagnosisUrl = parsed.diagnosisUrl;
         car.accidentUrl = parsed.accidentUrl;
         car.hasInspection = parsed.hasInspection;
+        if (parsed.inspectionCondition !== undefined) {
+          car.inspectionCondition = parsed.inspectionCondition;
+        }
         car.mainPhoto = parsed.mainPhoto;
         car.photosJson = parsed.photos;
         car.badge = parsed.badge;
@@ -146,15 +169,32 @@ export async function saveParsedCars(parsedCars: ParsedCarRecord[]) {
       }
     }
 
-    if (seenSourceIds.length > 0) {
+    if (seenKeys.length > 0 && deactivateOrigins.length > 0) {
       await manager
         .createQueryBuilder()
         .update(Car)
         .set({ isActive: false })
-        .where("source_id NOT IN (:...sourceIds)", { sourceIds: seenSourceIds })
+        .where("origin IN (:...origins)", { origins: deactivateOrigins })
+        .andWhere("CONCAT(origin, ':', source_id) NOT IN (:...seenKeys)", { seenKeys })
         .andWhere("is_active = :isActive", { isActive: true })
         .execute();
     }
+
+    // Remove stale duplicate rows that are shown as "bought", when an active twin exists.
+    // Fingerprint is per source + year + mileage + price.
+    await manager.query(`
+      DELETE c_inactive
+      FROM cars c_inactive
+      INNER JOIN cars c_active
+        ON c_active.origin = c_inactive.origin
+       AND c_active.year = c_inactive.year
+       AND c_active.mileage_km = c_inactive.mileage_km
+       AND c_active.price_won = c_inactive.price_won
+       AND c_active.is_active = 1
+      WHERE c_inactive.is_active = 0
+        AND c_inactive.id <> c_active.id
+        AND c_inactive.is_favorite = 0
+    `);
   });
 }
 
@@ -184,6 +224,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
   const rows = await carRepo
     .createQueryBuilder("c")
     .select("c.id", "id")
+    .addSelect("c.origin", "origin")
     .addSelect("c.source_id", "source_id")
     .addSelect("c.is_active", "is_active")
     .addSelect("c.is_new", "is_new")
@@ -206,6 +247,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
     .addOrderBy("c.id", "ASC")
     .getRawMany<{
       id: number;
+      origin: CarOrigin;
       source_id: string;
       is_active: number;
       is_new: number;
@@ -258,6 +300,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
 
     return {
       id: row.id,
+      origin: row.origin === "kbcha" ? "kbcha" : "encar",
       sourceId: row.source_id,
       isActive: Boolean(row.is_active),
       isNew: Boolean(row.is_new),

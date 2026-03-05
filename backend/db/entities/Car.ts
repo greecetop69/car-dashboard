@@ -10,13 +10,16 @@ import {
 import { CarPriceHistory } from "./CarPriceHistory.js";
 
 @Entity({ name: "cars" })
-@Unique("uq_cars_source_id", ["sourceId"])
+@Unique("uq_cars_origin_source_id", ["origin", "sourceId"])
 export class Car {
   @PrimaryGeneratedColumn()
   id!: number;
 
   @Column({ name: "source_id", type: "varchar", length: 32 })
   sourceId!: string;
+
+  @Column({ name: "origin", type: "varchar", length: 16, default: "encar" })
+  origin!: "encar" | "kbcha";
 
   @Column({ name: "year", type: "int" })
   year!: number;

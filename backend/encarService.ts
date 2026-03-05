@@ -1,3 +1,5 @@
+import { mapEncar, type CarPhoto, type ParsedCarRecord, type ParsedCarsResponse } from "./carSources.js";
+
 interface RawPhoto {
   type?: string;
   location?: string;
@@ -18,34 +20,6 @@ interface RawCar {
 
 interface ApiSearchResponse {
   SearchResults?: RawCar[];
-}
-
-export interface CarPhoto {
-  type: string;
-  location: string;
-  updatedDate: string;
-  ordering: number;
-}
-
-export interface ParsedCarRecord {
-  sourceId: string;
-  year: number;
-  mileageKm: number;
-  priceWon: number;
-  url: string;
-  inspectionUrl: string;
-  diagnosisUrl: string;
-  accidentUrl: string;
-  hasInspection: boolean;
-  mainPhoto: string | null;
-  photos: CarPhoto[];
-  badge: string;
-  modifiedDate: string;
-}
-
-export interface ParsedCarsResponse {
-  cars: ParsedCarRecord[];
-  updatedAt: string;
 }
 
 const SEARCH_HEADERS = {
@@ -125,33 +99,23 @@ async function fetchOnePage(type: string, offset: number) {
 }
 
 function deduplicate(cars: NormalizedCar[]) {
-  const seen = new Set<string>();
+  const seenSource = new Set<string>();
+  const seenFingerprint = new Set<string>();
   return cars.filter((car) => {
-    // A listing identity must be based on source id, otherwise different cars
-    // with same year/mileage/price can incorrectly overwrite each other.
-    const key = car.sourceId || `${car.year}_${car.mileageKm}_${car.priceWon}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
+    const sourceKey = car.sourceId || "";
+    if (sourceKey && seenSource.has(sourceKey)) return false;
+    if (sourceKey) seenSource.add(sourceKey);
+
+    // Encar can return duplicate listings with different ids (premium/general feeds).
+    const fingerprint = `${car.year}|${car.mileageKm}|${car.priceWon}`;
+    if (seenFingerprint.has(fingerprint)) return false;
+    seenFingerprint.add(fingerprint);
     return true;
   });
 }
 
 function mapCars(cars: NormalizedCar[]): ParsedCarRecord[] {
-  return cars.map((r) => ({
-    sourceId: r.sourceId,
-    year: r.year,
-    mileageKm: r.mileageKm,
-    priceWon: r.priceWon,
-    url: `https://fem.encar.com/cars/detail/${r.sourceId}`,
-    inspectionUrl: `https://fem.encar.com/cars/report/inspect/${r.sourceId}`,
-    diagnosisUrl: `https://fem.encar.com/cars/report/diagnosis/${r.sourceId}`,
-    accidentUrl: `https://fem.encar.com/cars/report/accident/${r.sourceId}`,
-    hasInspection: r.hasInspection,
-    mainPhoto: r.mainPhoto,
-    photos: r.photos,
-    badge: r.badge,
-    modifiedDate: r.modifiedDate,
-  }));
+  return cars.map((r) => mapEncar(r));
 }
 
 export async function fetchEncarCars(): Promise<ParsedCarsResponse> {

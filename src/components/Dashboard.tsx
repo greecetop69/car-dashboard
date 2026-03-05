@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCars, useToggleFavorite } from "../hooks/useCars";
 import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
-import { fmtEur, fmtKm } from "../utils/format";
+import { fmtKm, fmtWon } from "../utils/format";
 import CarTable from "./CarTable";
 import RangeFilter from "./RangeFilter";
 import StatsBar from "./StatsBar";
@@ -24,6 +24,16 @@ const DAMAGE_FILTER_OPTIONS: Array<{
   { key: "notFound", label: "Нет отчета", activeClass: "border-slate-300 bg-slate-100 text-slate-700" },
 ];
 
+const ORIGIN_FILTER_OPTIONS: Array<{
+  key: "all" | "encar" | "kbcha";
+  label: string;
+  activeClass: string;
+}> = [
+  { key: "all", label: "Все", activeClass: "border-blue-300 bg-blue-50 text-blue-700" },
+  { key: "encar", label: "ENCAR", activeClass: "border-red-300 bg-red-50 text-red-700" },
+  { key: "kbcha", label: "KBCHA", activeClass: "border-amber-300 bg-amber-50 text-amber-800" },
+];
+
 export default function Dashboard() {
   const { data, isPending, isError } = useCars();
   const toggleFavoriteMutation = useToggleFavorite();
@@ -33,13 +43,23 @@ export default function Dashboard() {
     () => cars.filter((car) => car.isActive !== false).length,
     [cars],
   );
+  const priceWonLimits = useMemo(() => {
+    if (cars.length === 0) return { min: 0, max: 0 };
+    let min = cars[0].priceWon;
+    let max = cars[0].priceWon;
+    for (const car of cars) {
+      if (car.priceWon < min) min = car.priceWon;
+      if (car.priceWon > max) max = car.priceWon;
+    }
+    return { min, max };
+  }, [cars]);
   const limits = {
     minYear: data?.meta?.minYear ?? 0,
     maxYear: data?.meta?.maxYear ?? 0,
     minMileage: data?.meta?.minMileage ?? 0,
     maxMileage: data?.meta?.maxMileage ?? 0,
-    minPrice: data?.meta?.minPrice ?? 0,
-    maxPrice: data?.meta?.maxPrice ?? 0,
+    minPriceWon: priceWonLimits.min,
+    maxPriceWon: priceWonLimits.max,
   };
 
   const [search, setSearch] = useState("");
@@ -49,6 +69,7 @@ export default function Dashboard() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [damageFilter, setDamageFilter] = useState<"all" | InspectionConditionKey>("all");
+  const [originFilter, setOriginFilter] = useState<"all" | "encar" | "kbcha">("all");
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -72,19 +93,19 @@ export default function Dashboard() {
   useEffect(() => {
     setYearRange([limits.minYear, limits.maxYear]);
     setMileRange([limits.minMileage, limits.maxMileage]);
-    setPriceRange([limits.minPrice, limits.maxPrice]);
+    setPriceRange([limits.minPriceWon, limits.maxPriceWon]);
   }, [
     limits.minYear,
     limits.maxYear,
     limits.minMileage,
     limits.maxMileage,
-    limits.minPrice,
-    limits.maxPrice,
+    limits.minPriceWon,
+    limits.maxPriceWon,
   ]);
 
   const readyForFilters = useMemo(() => {
-    return limits.maxYear > 0 && limits.maxMileage >= 0 && limits.maxPrice >= 0;
-  }, [limits.maxYear, limits.maxMileage, limits.maxPrice]);
+    return limits.maxYear > 0 && limits.maxMileage >= 0 && limits.maxPriceWon >= 0;
+  }, [limits.maxYear, limits.maxMileage, limits.maxPriceWon]);
 
   const filtered = useMemo(() => {
     return cars.filter((c) => {
@@ -103,14 +124,15 @@ export default function Dashboard() {
       }
       if (c.year < yearRange[0] || c.year > yearRange[1]) return false;
       if (c.mileageKm < mileRange[0] || c.mileageKm > mileRange[1]) return false;
-      if (c.price < priceRange[0] || c.price > priceRange[1]) return false;
+      if (c.priceWon < priceRange[0] || c.priceWon > priceRange[1]) return false;
+      if (originFilter !== "all" && c.origin !== originFilter) return false;
       if (damageFilter !== "all") {
         const condition = conditionByCarId.get(c.id);
         if (!condition || condition !== damageFilter) return false;
       }
       return true;
     });
-  }, [cars, search, yearRange, mileRange, priceRange, damageFilter, conditionByCarId]);
+  }, [cars, search, yearRange, mileRange, priceRange, originFilter, damageFilter, conditionByCarId]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -118,6 +140,12 @@ export default function Dashboard() {
     return [...filtered].sort((a, b) => {
       if (sortKey === "caromotoPrice") {
         return compareByCaromotoPrice(a, b, sortDir);
+      }
+      if (sortKey === "sourceId") {
+        const va = Number(a.sourceId ?? 0);
+        const vb = Number(b.sourceId ?? 0);
+        const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+        return sortDir === "asc" ? cmp : -cmp;
       }
 
       const va = a[sortKey];
@@ -145,20 +173,22 @@ export default function Dashboard() {
 
   const hasFilters =
     search ||
+    originFilter !== "all" ||
     damageFilter !== "all" ||
     yearRange[0] !== limits.minYear ||
     yearRange[1] !== limits.maxYear ||
     mileRange[0] !== limits.minMileage ||
     mileRange[1] !== limits.maxMileage ||
-    priceRange[0] !== limits.minPrice ||
-    priceRange[1] !== limits.maxPrice;
+    priceRange[0] !== limits.minPriceWon ||
+    priceRange[1] !== limits.maxPriceWon;
 
   function clearAll() {
     setSearch("");
+    setOriginFilter("all");
     setDamageFilter("all");
     setYearRange([limits.minYear, limits.maxYear]);
     setMileRange([limits.minMileage, limits.maxMileage]);
-    setPriceRange([limits.minPrice, limits.maxPrice]);
+    setPriceRange([limits.minPriceWon, limits.maxPriceWon]);
   }
 
   return (
@@ -214,14 +244,32 @@ export default function Dashboard() {
               disabled={!readyForFilters}
             />
             <RangeFilter
-              label="Цена €"
-              min={limits.minPrice}
-              max={limits.maxPrice}
+              label="Цена ₩"
+              min={limits.minPriceWon}
+              max={limits.maxPriceWon}
               value={priceRange}
               onChange={setPriceRange}
-              format={fmtEur}
+              format={fmtWon}
               disabled={!readyForFilters}
             />
+          </div>
+
+          <div className="h-px bg-slate-100" />
+
+          <div className="flex flex-wrap items-center gap-2">
+            {ORIGIN_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                onClick={() => setOriginFilter(option.key)}
+                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                  originFilter === option.key
+                    ? option.activeClass
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
 
           <div className="h-px bg-slate-100" />
@@ -294,6 +342,7 @@ export default function Dashboard() {
             sortKey={sortKey}
             sortDir={sortDir}
             selectedId={selectedId}
+            isFavoritesView={activeTab === "favorites"}
             onSort={handleSort}
             onSelectRow={(id) => setSelectedId((prev) => (prev === id ? null : id))}
             onToggleFavorite={(id, isFavorite) =>
@@ -309,4 +358,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
