@@ -3,6 +3,7 @@ import { Car } from "./db/entities/Car.js";
 import { CarPriceHistory } from "./db/entities/CarPriceHistory.js";
 import type { CarOrigin, ParsedCarRecord } from "./carSources.js";
 import { getWonToEurRate } from "./fx.js";
+import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import { In } from "typeorm";
 
 export interface PriceHistoryRow {
@@ -67,19 +68,53 @@ function toBoolFlag(value: unknown): boolean {
 }
 
 function deriveInspectionCondition(rawSummary: unknown): CarRow["inspectionCondition"] {
-  if (!rawSummary || typeof rawSummary !== "object") return null;
-  const summary = rawSummary as {
+  let normalized: unknown = rawSummary;
+  if (typeof normalized === "string") {
+    try {
+      normalized = JSON.parse(normalized);
+    } catch {
+      return null;
+    }
+  }
+  if (!normalized || typeof normalized !== "object") return null;
+
+  const summary = normalized as {
     notFound?: unknown;
     simpleRepair?: unknown;
     replacedParts?: unknown;
+    myAccidentCnt?: unknown;
+    accidentCnt?: unknown;
   };
   if (summary.notFound === true) return "notFound";
   const hasReplace = Array.isArray(summary.replacedParts) && summary.replacedParts.length > 0;
   const hasRepair = summary.simpleRepair === true;
+  const rawAccidentCount =
+    typeof summary.myAccidentCnt === "number"
+      ? summary.myAccidentCnt
+      : typeof summary.accidentCnt === "number"
+        ? summary.accidentCnt
+        : null;
+  const hasAccidentCount = rawAccidentCount != null && Number.isFinite(rawAccidentCount);
+
   if (hasReplace && hasRepair) return "replaceRepair";
   if (hasReplace) return "replace";
   if (hasRepair) return "repair";
+  if (hasAccidentCount) return rawAccidentCount > 0 ? "repair" : "clean";
   return "clean";
+}
+
+function getInspectionIdCandidatesFromRow(row: {
+  source_id: string;
+  url: string;
+  main_photo: string | null;
+}): number[] {
+  const fromPhoto = row.main_photo?.match(/\/(\d+)_\d+\.(?:jpg|jpeg|png)/i)?.[1] ?? null;
+  const fromUrl = row.url?.match(/\/detail\/(\d+)/i)?.[1] ?? null;
+  const fromSource = row.source_id ?? null;
+
+  return [fromPhoto, fromUrl, fromSource]
+    .map((value) => Number(value))
+    .filter((id, idx, arr) => Number.isInteger(id) && id > 0 && arr.indexOf(id) === idx);
 }
 
 export async function initializeDatabase() {
@@ -283,6 +318,46 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       modified_date: string;
     }>();
 
+  // Backfill inspection condition only for missing Encar rows.
+  // If condition is already set in DB, no external requests are made.
+  const missingEncarInspection = rows.filter((row) => {
+    const hasInspection = toBoolFlag(row.has_inspection);
+    return row.origin === "encar" && hasInspection && row.inspection_condition == null;
+  });
+
+  if (missingEncarInspection.length > 0) {
+    const queue = [...missingEncarInspection];
+    const workerCount = Math.min(3, queue.length);
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (queue.length > 0) {
+          const item = queue.shift();
+          if (!item) break;
+          const candidates = getInspectionIdCandidatesFromRow(item);
+          if (candidates.length === 0) continue;
+          const [primaryVehicleId, ...fallbackIds] = candidates;
+          try {
+            await getInspectionSummaryWithCarCache(primaryVehicleId, fallbackIds, item.id);
+          } catch {
+            // Ignore one-off external/API failures and keep current DB value.
+          }
+        }
+      }),
+    );
+
+    // Refresh condition for rows that were backfilled this request.
+    for (const row of rows) {
+      if (row.origin !== "encar" || row.inspection_condition != null) continue;
+      const updated = await carRepo.findOne({
+        where: { id: row.id },
+        select: { inspectionCondition: true },
+      });
+      if (updated?.inspectionCondition != null) {
+        row.inspection_condition = updated.inspectionCondition as CarRow["inspectionCondition"];
+      }
+    }
+  }
+
   const carIds = rows.map((row) => row.id);
   const historyRows = carIds.length
     ? await historyRepo.find({
@@ -313,6 +388,10 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
         ? (JSON.parse(row.photos_json) as ParsedCarRecord["photos"])
         : (row.photos_json as ParsedCarRecord["photos"]);
 
+    const inspectionCondition =
+      row.inspection_condition ?? deriveInspectionCondition(row.inspection_summary_json);
+    const hasInspection = toBoolFlag(row.has_inspection);
+
     return {
       id: row.id,
       origin: row.origin === "kbcha" ? "kbcha" : "encar",
@@ -328,9 +407,8 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
       inspectionUrl: row.inspection_url,
       diagnosisUrl: row.diagnosis_url,
       accidentUrl: row.accident_url,
-      hasInspection: toBoolFlag(row.has_inspection),
-      inspectionCondition:
-        row.inspection_condition ?? deriveInspectionCondition(row.inspection_summary_json),
+      hasInspection,
+      inspectionCondition,
       mainPhoto: row.main_photo,
       photos,
       badge: row.badge,

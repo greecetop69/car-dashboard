@@ -58,6 +58,12 @@ export type InspectionConditionKey =
   | "replaceRepair"
   | "notFound";
 
+interface OpenRecordPayload {
+  openData?: boolean;
+  myAccidentCost?: number | null;
+  otherAccidentCost?: number | null;
+}
+
 const INSPECTION_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
@@ -257,4 +263,54 @@ export async function getInspectionSummaryWithCarCache(
   car.inspectionCondition = getConditionKey(fresh);
   await AppDataSource.getRepository(Car).save(car);
   return fresh;
+}
+
+function getConditionFromOpenRecord(payload: OpenRecordPayload): InspectionConditionKey | null {
+  const myAccidentCost =
+    typeof payload.myAccidentCost === "number" && Number.isFinite(payload.myAccidentCost)
+      ? payload.myAccidentCost
+      : null;
+  const otherAccidentCost =
+    typeof payload.otherAccidentCost === "number" && Number.isFinite(payload.otherAccidentCost)
+      ? payload.otherAccidentCost
+      : null;
+
+  if (myAccidentCost == null && otherAccidentCost == null) return null;
+  const total = (myAccidentCost ?? 0) + (otherAccidentCost ?? 0);
+  return total > 0 ? "repair" : "clean";
+}
+
+async function getEncarOpenRecordCondition(vehicleId: number): Promise<InspectionConditionKey | null> {
+  const response = await fetch(
+    `https://api.encar.com/v1/readside/record/vehicle/${vehicleId}/open`,
+    { headers: INSPECTION_HEADERS },
+  );
+
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Open-record API returned HTTP ${response.status}`);
+  }
+
+  const payload = (await response.json()) as OpenRecordPayload;
+  return getConditionFromOpenRecord(payload);
+}
+
+export async function getEncarOpenRecordConditionWithFallback(
+  primaryVehicleId: number,
+  fallbackIds: number[],
+): Promise<InspectionConditionKey | null> {
+  const candidates = [primaryVehicleId, ...fallbackIds].filter(
+    (id, idx, arr) => Number.isInteger(id) && id > 0 && arr.indexOf(id) === idx,
+  );
+
+  for (const candidate of candidates) {
+    try {
+      const condition = await getEncarOpenRecordCondition(candidate);
+      if (condition) return condition;
+    } catch {
+      // Continue to next candidate.
+    }
+  }
+
+  return null;
 }
