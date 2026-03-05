@@ -3,7 +3,8 @@ import axios from "axios";
 import { queryKeys } from "../api/queryKeys";
 import type { InspectionSummary } from "../types/inspection";
 
-const api = axios.create({ baseURL: "/api" });
+const apiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "");
+const api = axios.create({ baseURL: apiUrl ? `${apiUrl}/api` : "/api" });
 
 export async function fetchInspection(
   vehicleId: number,
