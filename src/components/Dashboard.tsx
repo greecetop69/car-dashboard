@@ -4,6 +4,7 @@ import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
 import { fmtKm, fmtWon } from "../utils/format";
 import CarTable from "./CarTable";
+import NotificationsBell from "./NotificationsBell";
 import RangeFilter from "./RangeFilter";
 import StatsBar from "./StatsBar";
 
@@ -201,6 +202,41 @@ export default function Dashboard() {
     setPriceRange([limits.minPriceWon, limits.maxPriceWon]);
   }
 
+  function scrollToCarElement(origin: "encar" | "kbcha", sourceId: string) {
+    const selector = `[data-car-origin="${origin}"][data-car-source-id="${sourceId}"]`;
+    const matches = Array.from(document.querySelectorAll<HTMLElement>(selector));
+    const target = matches.find((node) => node.offsetParent !== null) ?? matches[0] ?? null;
+    if (!target) return false;
+
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.classList.add("ring-2", "ring-blue-400");
+    window.setTimeout(() => {
+      target.classList.remove("ring-2", "ring-blue-400");
+    }, 1600);
+    return true;
+  }
+
+  function handleNavigateToCar(origin: "encar" | "kbcha", sourceId: string) {
+    setActiveTab("all");
+    clearAll();
+
+    const targetCar = cars.find((car) => (car.origin ?? "encar") === origin && car.sourceId === sourceId);
+    if (targetCar) {
+      setSelectedId(targetCar.id);
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const foundNow = scrollToCarElement(origin, sourceId);
+        if (!foundNow) {
+          window.setTimeout(() => {
+            scrollToCarElement(origin, sourceId);
+          }, 220);
+        }
+      });
+    });
+  }
+
   if (isPending && !data) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
@@ -216,10 +252,11 @@ export default function Dashboard() {
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-[1680px] px-5 py-10">
         <div className="mb-7">
-          <div className="mb-1 flex items-center gap-2.5">
+          <div className="mb-1 flex items-center justify-between gap-2.5">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-800">
               Audi A3 - подбор
             </h1>
+            <NotificationsBell onNavigateToCar={handleNavigateToCar} />
           </div>
           <p className="ml-1 text-sm text-slate-400">
             База объявлений с фильтрами и сортировкой
@@ -388,6 +425,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 
 

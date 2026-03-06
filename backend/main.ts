@@ -1,6 +1,13 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { getCarsFromDb, runMigrations, saveParsedCars, setCarFavorite } from "./db.js";
+import {
+  getCarsFromDb,
+  getNotificationsFromDb,
+  markNotificationsRead,
+  runMigrations,
+  saveParsedCars,
+  setCarFavorite,
+} from "./db.js";
 import { fetchEncarCars } from "./encarService.js";
 import { fetchKbchaCars } from "./kbchaService.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
@@ -161,6 +168,39 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     } catch (error) {
       sendJson(res, 500, {
         error: "Failed to load cars",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/notifications") {
+    try {
+      const limit = Number(url.searchParams.get("limit") ?? 100);
+      const data = await getNotificationsFromDb(limit);
+      sendJson(res, 200, data);
+    } catch (error) {
+      sendJson(res, 500, {
+        error: "Failed to load notifications",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/notifications/read") {
+    try {
+      const payload = (await readJsonBody(req)) as { ids?: unknown };
+      const idsRaw = Array.isArray(payload.ids) ? payload.ids : [];
+      const ids = idsRaw
+        .map((item) => Number(item))
+        .filter((value) => Number.isInteger(value) && value > 0);
+
+      const updated = await markNotificationsRead(ids);
+      sendJson(res, 200, { status: "ok", updated });
+    } catch (error) {
+      sendJson(res, 500, {
+        error: "Failed to mark notifications as read",
         message: error instanceof Error ? error.message : "Unknown error",
       });
     }

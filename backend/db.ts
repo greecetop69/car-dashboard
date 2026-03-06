@@ -1,9 +1,16 @@
 import { AppDataSource } from "./db/data-source.js";
 import { Car } from "./db/entities/Car.js";
 import { CarPriceHistory } from "./db/entities/CarPriceHistory.js";
+import { Notification, type NotificationType } from "./db/entities/Notification.js";
 import type { CarOrigin, ParsedCarRecord } from "./carSources.js";
 import { getWonToEurRate } from "./fx.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
+import {
+  buildCarSoldNotification,
+  buildNewCarNotification,
+  buildPriceDropNotification,
+  type PendingNotification,
+} from "./notificationFactories.js";
 import { In } from "typeorm";
 
 const ENABLE_INSPECTION_BACKFILL_ON_READ = ["1", "true", "yes"].includes(
@@ -54,6 +61,24 @@ export interface CarsApiResponse {
     maxPrice: number;
   };
   updatedAt: string;
+}
+
+export interface NotificationRow {
+  id: number;
+  type: NotificationType;
+  carOrigin: CarOrigin | null;
+  carSourceId: string | null;
+  title: string;
+  message: string;
+  payload: Record<string, unknown> | null;
+  isRead: boolean;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface NotificationsApiResponse {
+  items: NotificationRow[];
+  unreadCount: number;
 }
 
 function toBoolFlag(value: unknown): boolean {
@@ -154,13 +179,17 @@ export async function saveParsedCars(
   await AppDataSource.transaction(async (manager) => {
     const carRepo = manager.getRepository(Car);
     const historyRepo = manager.getRepository(CarPriceHistory);
+    const notificationRepo = manager.getRepository(Notification);
     const seenKeys: string[] = [];
+    const notificationsToInsert: PendingNotification[] = [];
 
     for (const parsed of uniqueParsedCars) {
       seenKeys.push(`${parsed.origin}:${parsed.sourceId}`);
       let car = await carRepo.findOne({
         where: { origin: parsed.origin, sourceId: parsed.sourceId },
       });
+      const existed = Boolean(car);
+      const previousPriceWon = car ? Number(car.priceWon) : null;
 
       if (!car) {
         car = carRepo.create({
@@ -185,6 +214,8 @@ export async function saveParsedCars(
           isFavorite: false,
           lastSeenAt: syncSeenAt,
         });
+
+        notificationsToInsert.push(buildNewCarNotification(parsed));
       } else {
         car.origin = parsed.origin;
         car.year = parsed.year;
@@ -205,6 +236,15 @@ export async function saveParsedCars(
         car.isActive = true;
         car.isNew = false;
         car.lastSeenAt = syncSeenAt;
+
+        if (
+          existed &&
+          previousPriceWon != null &&
+          Number.isFinite(previousPriceWon) &&
+          parsed.priceWon < previousPriceWon
+        ) {
+          notificationsToInsert.push(buildPriceDropNotification(parsed, previousPriceWon));
+        }
       }
 
       car = await carRepo.save(car);
@@ -224,6 +264,19 @@ export async function saveParsedCars(
     }
 
     if (seenKeys.length > 0 && deactivateOrigins.length > 0) {
+      const toDeactivate = await carRepo
+        .createQueryBuilder("c")
+        .select([
+          "c.origin AS origin",
+          "c.source_id AS sourceId",
+          "c.price_won AS priceWon",
+          "c.url AS url",
+        ])
+        .where("c.origin IN (:...origins)", { origins: deactivateOrigins })
+        .andWhere("CONCAT(c.origin, ':', c.source_id) NOT IN (:...seenKeys)", { seenKeys })
+        .andWhere("c.is_active = :isActive", { isActive: true })
+        .getRawMany<{ origin: CarOrigin; sourceId: string; priceWon: string; url: string }>();
+
       await manager
         .createQueryBuilder()
         .update(Car)
@@ -232,6 +285,18 @@ export async function saveParsedCars(
         .andWhere("CONCAT(origin, ':', source_id) NOT IN (:...seenKeys)", { seenKeys })
         .andWhere("is_active = :isActive", { isActive: true })
         .execute();
+
+      for (const row of toDeactivate) {
+        const priceWon = Number(row.priceWon);
+        notificationsToInsert.push(
+          buildCarSoldNotification({
+            origin: row.origin,
+            sourceId: row.sourceId,
+            priceWon: Number.isFinite(priceWon) ? priceWon : null,
+            url: row.url,
+          }),
+        );
+      }
     }
 
     // Remove stale duplicate rows that are shown as "bought", when an active twin exists.
@@ -249,6 +314,23 @@ export async function saveParsedCars(
         AND c_inactive.id <> c_active.id
         AND c_inactive.is_favorite = 0
     `);
+
+    if (notificationsToInsert.length > 0) {
+      await notificationRepo.save(
+        notificationsToInsert.map((item) =>
+          notificationRepo.create({
+            type: item.type,
+            carOrigin: item.carOrigin,
+            carSourceId: item.carSourceId,
+            title: item.title,
+            message: item.message,
+            payloadJson: item.payloadJson,
+            isRead: false,
+            readAt: null,
+          }),
+        ),
+      );
+    }
   });
 }
 
@@ -446,4 +528,55 @@ export async function setCarFavorite(carId: number, isFavorite: boolean) {
   const carRepo = AppDataSource.getRepository(Car);
   const result = await carRepo.update({ id: carId }, { isFavorite });
   return result.affected === 1;
+}
+
+export async function getNotificationsFromDb(limit = 100): Promise<NotificationsApiResponse> {
+  await initializeDatabase();
+  const notificationRepo = AppDataSource.getRepository(Notification);
+  const safeLimit = Math.max(1, Math.min(300, Number(limit) || 100));
+
+  const rows = await notificationRepo.find({
+    order: { createdAt: "DESC", id: "DESC" },
+    take: safeLimit,
+  });
+
+  const unreadCount = await notificationRepo.count({
+    where: { isRead: false },
+  });
+
+  return {
+    items: rows.map((row) => ({
+      id: Number(row.id),
+      type: row.type,
+      carOrigin: row.carOrigin,
+      carSourceId: row.carSourceId,
+      title: row.title,
+      message: row.message,
+      payload:
+        row.payloadJson && typeof row.payloadJson === "object"
+          ? (row.payloadJson as Record<string, unknown>)
+          : null,
+      isRead: toBoolFlag(row.isRead),
+      createdAt: row.createdAt.toISOString(),
+      readAt: row.readAt ? row.readAt.toISOString() : null,
+    })),
+    unreadCount,
+  };
+}
+
+export async function markNotificationsRead(ids: number[]): Promise<number> {
+  await initializeDatabase();
+  const notificationRepo = AppDataSource.getRepository(Notification);
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (uniqueIds.length === 0) return 0;
+
+  const result = await notificationRepo
+    .createQueryBuilder()
+    .update(Notification)
+    .set({ isRead: true, readAt: new Date() })
+    .where("id IN (:...ids)", { ids: uniqueIds })
+    .andWhere("is_read = :isRead", { isRead: false })
+    .execute();
+
+  return result.affected ?? 0;
 }

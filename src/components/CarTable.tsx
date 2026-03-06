@@ -72,6 +72,8 @@ export default function CarTable({
                     const isSelected = selectedId === car.id;
                     const caromotoPrice = getCaromotoPriceEur(car);
                     const originBadge = getOriginBadge(car.origin);
+                    const carOrigin = car.origin ?? "encar";
+                    const carSourceId = car.sourceId ?? "";
                     const mobilePhotoClass = isFavoritesView
                         ? "h-24 w-36"
                         : "h-24 w-32";
@@ -87,6 +89,8 @@ export default function CarTable({
                     return (
                         <div
                             key={car.id}
+                            data-car-origin={carOrigin}
+                            data-car-source-id={carSourceId}
                             onClick={() => {
                                 if (!isInactive) onSelectRow(car.id);
                             }}
@@ -293,6 +297,8 @@ export default function CarTable({
                         const isEven = i % 2 === 0;
                         const isInactive = car.isActive === false;
                         const isNew = car.isNew === true;
+                        const carOrigin = car.origin ?? "encar";
+                        const carSourceId = car.sourceId ?? "";
                         const mutedText = isInactive
                             ? "text-slate-400"
                             : "text-slate-700";
@@ -305,6 +311,8 @@ export default function CarTable({
                         return (
                             <tr
                                 key={car.id}
+                                data-car-origin={carOrigin}
+                                data-car-source-id={carSourceId}
                                 onClick={() => {
                                     if (!isInactive) onSelectRow(car.id);
                                 }}

@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { Car } from "./entities/Car.js";
 import { CarPriceHistory } from "./entities/CarPriceHistory.js";
+import { Notification } from "./entities/Notification.js";
 import { InitCarsAndPriceHistory2026030401000 } from "./migrations/2026030401-InitCarsAndPriceHistory.js";
 import { AddCarActiveState2026030402000 } from "./migrations/2026030402000-AddCarActiveState.js";
 import { AddCarNewState2026030403000 } from "./migrations/2026030403000-AddCarNewState.js";
@@ -10,6 +11,7 @@ import { AddCarFavoriteFlag2026030405000 } from "./migrations/2026030405000-AddC
 import { AddInspectionCacheColumns2026030406000 } from "./migrations/2026030406000-AddInspectionCacheColumns.js";
 import { AddInspectionConditionColumn2026030407000 } from "./migrations/2026030407000-AddInspectionConditionColumn.js";
 import { AddCarOrigin2026030501000 } from "./migrations/2026030501000-AddCarOrigin.js";
+import { AddNotifications2026030609000 } from "./migrations/2026030609000-AddNotifications.js";
 
 function firstNonEmpty(...values: Array<string | undefined>) {
   return values.find((value) => typeof value === "string" && value.trim().length > 0);
@@ -56,7 +58,7 @@ export const AppDataSource = new DataSource({
   password,
   database,
   ...(sslEnabled ? { ssl: { rejectUnauthorized: sslRejectUnauthorized } } : {}),
-  entities: [Car, CarPriceHistory],
+  entities: [Car, CarPriceHistory, Notification],
   migrations: [
     InitCarsAndPriceHistory2026030401000,
     AddCarActiveState2026030402000,
@@ -66,6 +68,7 @@ export const AppDataSource = new DataSource({
     AddInspectionCacheColumns2026030406000,
     AddInspectionConditionColumn2026030407000,
     AddCarOrigin2026030501000,
+    AddNotifications2026030609000,
   ],
   synchronize: false,
   logging: false,
