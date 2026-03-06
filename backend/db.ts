@@ -542,29 +542,28 @@ export async function reactivateRecentlySeenInactiveCars(hours: number) {
   await initializeDatabase();
   const safeHours = Math.max(1, Math.floor(hours));
   const threshold = new Date(Date.now() - safeHours * 60 * 60 * 1000);
+  // MySQL forbids UPDATE ... WHERE EXISTS(SELECT FROM same table).
+  // Use UPDATE ... JOIN instead.
+  const result = await AppDataSource.query(
+    `
+      UPDATE cars c_inactive
+      INNER JOIN cars c_active
+        ON c_active.origin = c_inactive.origin
+       AND c_active.year = c_inactive.year
+       AND c_active.mileage_km = c_inactive.mileage_km
+       AND c_active.price_won = c_inactive.price_won
+       AND c_active.is_active = 1
+       AND c_active.id <> c_inactive.id
+      SET c_inactive.is_active = 1,
+          c_inactive.updated_at = CURRENT_TIMESTAMP
+      WHERE c_inactive.is_active = 0
+        AND c_inactive.last_seen_at IS NOT NULL
+        AND c_inactive.last_seen_at >= ?
+    `,
+    [threshold],
+  );
 
-  // Restore only obvious false-inactive duplicates:
-  // inactive row has an active twin with same source fingerprint.
-  const result = await AppDataSource.createQueryBuilder()
-    .update(Car)
-    .set({ isActive: true })
-    .where("is_active = :inactive", { inactive: 0 })
-    .andWhere("last_seen_at IS NOT NULL")
-    .andWhere("last_seen_at >= :threshold", { threshold })
-    .andWhere(
-      `EXISTS (
-        SELECT 1
-        FROM cars c2
-        WHERE c2.origin = cars.origin
-          AND c2.year = cars.year
-          AND c2.mileage_km = cars.mileage_km
-          AND c2.price_won = cars.price_won
-          AND c2.is_active = 1
-      )`,
-    )
-    .execute();
-
-  return result.affected ?? 0;
+  return Number(result?.affectedRows ?? 0);
 }
 
 export async function deleteCarsAbovePrice(maxPriceWon: number) {
