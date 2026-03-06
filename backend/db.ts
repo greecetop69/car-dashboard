@@ -16,6 +16,7 @@ import { In } from "typeorm";
 const ENABLE_INSPECTION_BACKFILL_ON_READ = ["1", "true", "yes"].includes(
   (process.env.ENABLE_INSPECTION_BACKFILL_ON_READ ?? "").toLowerCase(),
 );
+const DEACTIVATION_GRACE_HOURS = Math.max(1, Number(process.env.DEACTIVATION_GRACE_HOURS ?? 18));
 
 export interface PriceHistoryRow {
   priceWon: number;
@@ -171,6 +172,7 @@ export async function saveParsedCars(
 ) {
   await initializeDatabase();
   const syncSeenAt = new Date();
+  const deactivateBefore = new Date(syncSeenAt.getTime() - DEACTIVATION_GRACE_HOURS * 60 * 60 * 1000);
   const uniqueParsedCars = dedupeParsedCarsByOriginSource(parsedCars);
   const deactivateOrigins =
     options?.deactivateOrigins?.filter((item, idx, arr) => arr.indexOf(item) === idx) ??
@@ -275,6 +277,9 @@ export async function saveParsedCars(
         .where("c.origin IN (:...origins)", { origins: deactivateOrigins })
         .andWhere("CONCAT(c.origin, ':', c.source_id) NOT IN (:...seenKeys)", { seenKeys })
         .andWhere("c.is_active = :isActive", { isActive: true })
+        .andWhere("(c.last_seen_at IS NULL OR c.last_seen_at < :deactivateBefore)", {
+          deactivateBefore,
+        })
         .getRawMany<{ origin: CarOrigin; sourceId: string; priceWon: string; url: string }>();
 
       await manager
@@ -284,6 +289,9 @@ export async function saveParsedCars(
         .where("origin IN (:...origins)", { origins: deactivateOrigins })
         .andWhere("CONCAT(origin, ':', source_id) NOT IN (:...seenKeys)", { seenKeys })
         .andWhere("is_active = :isActive", { isActive: true })
+        .andWhere("(last_seen_at IS NULL OR last_seen_at < :deactivateBefore)", {
+          deactivateBefore,
+        })
         .execute();
 
       for (const row of toDeactivate) {
@@ -530,6 +538,35 @@ export async function setCarFavorite(carId: number, isFavorite: boolean) {
   return result.affected === 1;
 }
 
+export async function reactivateRecentlySeenInactiveCars(hours: number) {
+  await initializeDatabase();
+  const safeHours = Math.max(1, Math.floor(hours));
+  const threshold = new Date(Date.now() - safeHours * 60 * 60 * 1000);
+
+  // Restore only obvious false-inactive duplicates:
+  // inactive row has an active twin with same source fingerprint.
+  const result = await AppDataSource.createQueryBuilder()
+    .update(Car)
+    .set({ isActive: true })
+    .where("is_active = :inactive", { inactive: 0 })
+    .andWhere("last_seen_at IS NOT NULL")
+    .andWhere("last_seen_at >= :threshold", { threshold })
+    .andWhere(
+      `EXISTS (
+        SELECT 1
+        FROM cars c2
+        WHERE c2.origin = cars.origin
+          AND c2.year = cars.year
+          AND c2.mileage_km = cars.mileage_km
+          AND c2.price_won = cars.price_won
+          AND c2.is_active = 1
+      )`,
+    )
+    .execute();
+
+  return result.affected ?? 0;
+}
+
 export async function deleteCarsAbovePrice(maxPriceWon: number) {
   await initializeDatabase();
   if (!Number.isFinite(maxPriceWon) || maxPriceWon <= 0) return 0;
@@ -591,6 +628,95 @@ export async function reactivateFilteredOutKbchaCars(filter: {
     .execute();
 
   return result.affected ?? 0;
+}
+
+export async function deactivateMissingPartialOriginCars(params: {
+  origin: CarOrigin;
+  seenSourceIds: string[];
+  filter?: {
+    minYear?: number;
+    maxYear?: number;
+    maxMileageKm?: number;
+    maxPriceWon?: number;
+  };
+}) {
+  await initializeDatabase();
+  const { origin, filter } = params;
+  const seenSourceIds = [...new Set(params.seenSourceIds.filter(Boolean))];
+  if (seenSourceIds.length === 0) return 0;
+
+  let affected = 0;
+  await AppDataSource.transaction(async (manager) => {
+    const notificationRepo = manager.getRepository(Notification);
+
+    const qb = manager
+      .createQueryBuilder()
+      .from(Car, "c")
+      .select([
+        "c.origin AS origin",
+        "c.source_id AS sourceId",
+        "c.price_won AS priceWon",
+        "c.url AS url",
+      ])
+      .where("c.origin = :origin", { origin })
+      .andWhere("c.is_active = :isActive", { isActive: true })
+      .andWhere("c.source_id NOT IN (:...seenSourceIds)", { seenSourceIds });
+
+    if (filter?.minYear != null) qb.andWhere("c.year >= :minYear", { minYear: filter.minYear });
+    if (filter?.maxYear != null) qb.andWhere("c.year <= :maxYear", { maxYear: filter.maxYear });
+    if (filter?.maxMileageKm != null) {
+      qb.andWhere("c.mileage_km <= :maxMileageKm", { maxMileageKm: filter.maxMileageKm });
+    }
+    if (filter?.maxPriceWon != null) {
+      qb.andWhere("c.price_won <= :maxPriceWon", { maxPriceWon: filter.maxPriceWon });
+    }
+
+    const toDeactivate = await qb.getRawMany<{
+      origin: CarOrigin;
+      sourceId: string;
+      priceWon: string;
+      url: string;
+    }>();
+
+    const updateQb = manager
+      .createQueryBuilder()
+      .update(Car)
+      .set({ isActive: false })
+      .where("origin = :origin", { origin })
+      .andWhere("is_active = :isActive", { isActive: true })
+      .andWhere("source_id NOT IN (:...seenSourceIds)", { seenSourceIds });
+
+    if (filter?.minYear != null) updateQb.andWhere("year >= :minYear", { minYear: filter.minYear });
+    if (filter?.maxYear != null) updateQb.andWhere("year <= :maxYear", { maxYear: filter.maxYear });
+    if (filter?.maxMileageKm != null) {
+      updateQb.andWhere("mileage_km <= :maxMileageKm", { maxMileageKm: filter.maxMileageKm });
+    }
+    if (filter?.maxPriceWon != null) {
+      updateQb.andWhere("price_won <= :maxPriceWon", { maxPriceWon: filter.maxPriceWon });
+    }
+
+    const result = await updateQb.execute();
+    affected = result.affected ?? 0;
+
+    if (toDeactivate.length > 0) {
+      await notificationRepo.save(
+        toDeactivate.map((row) =>
+          notificationRepo.create({
+            ...buildCarSoldNotification({
+              origin: row.origin,
+              sourceId: row.sourceId,
+              priceWon: Number.isFinite(Number(row.priceWon)) ? Number(row.priceWon) : null,
+              url: row.url,
+            }),
+            isRead: false,
+            readAt: null,
+          }),
+        ),
+      );
+    }
+  });
+
+  return affected;
 }
 
 export async function getNotificationsFromDb(limit = 100): Promise<NotificationsApiResponse> {

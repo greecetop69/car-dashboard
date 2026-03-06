@@ -1,11 +1,13 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
+  deactivateMissingPartialOriginCars,
   deleteCarsAbovePrice,
   getCarsFromDb,
   getNotificationsFromDb,
   markNotificationsRead,
   reactivateFilteredOutKbchaCars,
+  reactivateRecentlySeenInactiveCars,
   runMigrations,
   saveParsedCars,
   setCarFavorite,
@@ -20,6 +22,13 @@ const PORT = Number(process.env.PORT || 3001);
 const SYNC_TIMEOUT_MS = 180000;
 const MAX_ALLOWED_PRICE_WON = 14500000;
 const STALE_SYNC_THRESHOLD_MS = 6 * 60 * 60 * 1000;
+const STARTUP_REACTIVATE_HOURS = Math.max(
+  1,
+  Number(process.env.STARTUP_REACTIVATE_HOURS ?? 72),
+);
+const AUTO_SYNC_ON_STARTUP = !["0", "false", "no"].includes(
+  (process.env.AUTO_SYNC_ON_STARTUP ?? "true").toLowerCase(),
+);
 
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
@@ -40,7 +49,8 @@ interface SyncResult {
   updatedAt: string;
 }
 
-async function syncCars(): Promise<SyncResult> {
+async function syncCars(options?: { allowDeactivate?: boolean }): Promise<SyncResult> {
+  const allowDeactivate = options?.allowDeactivate ?? true;
   if (syncInFlight) return syncInFlight;
 
   syncInFlight = (async (): Promise<SyncResult> => {
@@ -53,7 +63,20 @@ async function syncCars(): Promise<SyncResult> {
         if (encar.cars.length > 0 && !encar.isPartial) deactivateOrigins.push("encar");
         if (kbcha.cars.length > 0 && !kbcha.isPartial) deactivateOrigins.push("kbcha");
 
-        await saveParsedCars([...encar.cars, ...kbcha.cars], { deactivateOrigins });
+        await saveParsedCars([...encar.cars, ...kbcha.cars], {
+          deactivateOrigins: allowDeactivate ? deactivateOrigins : [],
+        });
+
+        if (allowDeactivate && kbcha.isPartial) {
+          const deactivatedKbcha = await deactivateMissingPartialOriginCars({
+            origin: "kbcha",
+            seenSourceIds: kbcha.cars.map((item) => item.sourceId),
+            filter: kbcha.filter,
+          });
+          if (deactivatedKbcha > 0) {
+            console.log(`[sync] Deactivated ${deactivatedKbcha} sold KBCHA cars within partial filter`);
+          }
+        }
 
         if (kbcha.isPartial && kbcha.filter) {
           const restored = await reactivateFilteredOutKbchaCars(kbcha.filter);
@@ -143,12 +166,12 @@ async function handleCarsRequest(forceRefresh: boolean) {
     Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs > STALE_SYNC_THRESHOLD_MS;
 
   if (forceRefresh || current.cars.length === 0) {
-    await syncCars();
+    await syncCars({ allowDeactivate: false });
     return getCarsFromDb();
   }
 
   if (isStale) {
-    await syncCars();
+    await syncCars({ allowDeactivate: false });
     return getCarsFromDb();
   }
 
@@ -304,9 +327,24 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
 await runMigrations();
 startDailySyncScheduler();
-void syncCars().catch((error) => {
-  console.error("[sync] Startup sync failed:", error);
-});
+void (async () => {
+  try {
+    const reactivated = await reactivateRecentlySeenInactiveCars(STARTUP_REACTIVATE_HOURS);
+    if (reactivated > 0) {
+      console.log(`[startup] Reactivated ${reactivated} recently seen inactive cars`);
+    }
+  } catch (error) {
+    console.error("[startup] Failed to reactivate recently seen cars:", error);
+  }
+
+  if (!AUTO_SYNC_ON_STARTUP) return;
+
+  try {
+    await syncCars({ allowDeactivate: false });
+  } catch (error) {
+    console.error("[sync] Startup sync failed:", error);
+  }
+})();
 
 server.listen(PORT, () => {
   console.log(`Backend server listening on http://localhost:${PORT}`);

@@ -73,7 +73,7 @@ function buildKbSearchUrl(searchAfter: string) {
     pageSize: "50",
     includeFields:
       "carSeq,fileNameArray,ownerYn,makerName,className,carName,modelName,gradeName,regiDay,yymm,km,cityCodeName2,sellAmtGbn,sellAmt,sellAmtPrev,carMasterSpecialYn,monthLeaseAmt,interestFreeYn,ownerYn,directYn,carAccidentNo,warrantyYn,falsityYn,kbLeaseYn,friendDealerYn,orderDate,certifiedShopYn,kbCertifiedYn,hasOverThreeFileNames,diagYn,diagGbn,lineAdYn,tbMemberMemberName,carAccidentNo,colorCodeName,gasName,safeTel,carHistorySeq,homeserviceYn2,labsDanjiNo2,premiumYn,premiumVideo,premiumVideoType,premiumVideoImage,t34SellGbn,t34MonthAmt,t34DiscountAmt,adState,shopPenaltyYn,paymentPremiumYn,paymentPremiumText,paymentPremiumMarkCdArray,paymentPremiumMarkNmArray,contractingYn,partnerCertifiedYn,seatColorCode,seatColorNm,paymentPlayYn",
-    displaySoldoutYn: "Y",
+    displaySoldoutYn: "N",
     v: String(Date.now()),
     searchAfter,
   });
