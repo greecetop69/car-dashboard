@@ -1,9 +1,11 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
+  deleteCarsAbovePrice,
   getCarsFromDb,
   getNotificationsFromDb,
   markNotificationsRead,
+  reactivateFilteredOutKbchaCars,
   runMigrations,
   saveParsedCars,
   setCarFavorite,
@@ -16,6 +18,7 @@ import { readJsonBody, sendJson } from "./http.js";
 
 const PORT = Number(process.env.PORT || 3001);
 const SYNC_TIMEOUT_MS = 180000;
+const MAX_ALLOWED_PRICE_WON = 14500000;
 
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
@@ -46,10 +49,22 @@ async function syncCars(): Promise<SyncResult> {
         const [encar, kbcha] = await Promise.all([fetchEncarCars(), fetchKbchaCars()]);
         syncedCars = encar.cars.length + kbcha.cars.length;
         const deactivateOrigins: CarOrigin[] = [];
-        if (encar.cars.length > 0) deactivateOrigins.push("encar");
-        if (kbcha.cars.length > 0) deactivateOrigins.push("kbcha");
+        if (encar.cars.length > 0 && !encar.isPartial) deactivateOrigins.push("encar");
+        if (kbcha.cars.length > 0 && !kbcha.isPartial) deactivateOrigins.push("kbcha");
 
         await saveParsedCars([...encar.cars, ...kbcha.cars], { deactivateOrigins });
+
+        if (kbcha.isPartial && kbcha.filter) {
+          const restored = await reactivateFilteredOutKbchaCars(kbcha.filter);
+          if (restored > 0) {
+            console.log(`[sync] Restored ${restored} KBCHA cars that are outside partial filter`);
+          }
+        }
+
+        const deletedExpensive = await deleteCarsAbovePrice(MAX_ALLOWED_PRICE_WON);
+        if (deletedExpensive > 0) {
+          console.log(`[sync] Deleted ${deletedExpensive} cars above ₩ ${MAX_ALLOWED_PRICE_WON.toLocaleString("ru-RU")}`);
+        }
       })(),
       SYNC_TIMEOUT_MS,
       "Sync timeout exceeded",

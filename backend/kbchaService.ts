@@ -32,6 +32,11 @@ const KB_HEADERS = {
 
 const KB_SEARCH_BASE_URL = "https://m.kbchachacha.com/public/web/search/infinitySearch.json";
 const SEARCH_TIMEOUT_MS = 15000;
+const KB_MIN_YEAR = 2017;
+const KB_MAX_YEAR = 2020;
+const KB_MAX_KM = 130000;
+const KB_MAX_PRICE_WON = 14500000;
+const KB_MAX_PRICE_MANWON = Math.floor(KB_MAX_PRICE_WON / 10000);
 
 function parseYear(hit: KbSearchHit) {
   if (typeof hit.yymm === "number") return hit.yymm;
@@ -60,9 +65,9 @@ function buildKbSearchUrl(searchAfter: string) {
     makerCode: "109",
     classCode: "1941",
     carCode: "1552",
-    km: ",130000",
-    regiDay: "2017,2020",
-    sellAmt: ",1400",
+    km: `,${KB_MAX_KM}`,
+    regiDay: `${KB_MIN_YEAR},${KB_MAX_YEAR}`,
+    sellAmt: `,${KB_MAX_PRICE_MANWON}`,
     sort: "-hasOverThreeFileNames,diagOrKbCertifiedOrPremiumYn,-paymentPlayYn,-homeserviceYn2,-orderDate",
     page: "1",
     pageSize: "50",
@@ -164,5 +169,12 @@ export async function fetchKbchaCars(): Promise<ParsedCarsResponse> {
   return {
     cars,
     updatedAt: new Date().toISOString(),
+    isPartial: true,
+    filter: {
+      minYear: KB_MIN_YEAR,
+      maxYear: KB_MAX_YEAR,
+      maxMileageKm: KB_MAX_KM,
+      maxPriceWon: KB_MAX_PRICE_WON,
+    },
   };
 }

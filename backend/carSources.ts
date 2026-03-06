@@ -28,6 +28,13 @@ export interface ParsedCarRecord {
 export interface ParsedCarsResponse {
   cars: ParsedCarRecord[];
   updatedAt: string;
+  isPartial?: boolean;
+  filter?: {
+    minYear?: number;
+    maxYear?: number;
+    maxMileageKm?: number;
+    maxPriceWon?: number;
+  };
 }
 
 export interface EncarMapInput {

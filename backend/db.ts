@@ -530,6 +530,69 @@ export async function setCarFavorite(carId: number, isFavorite: boolean) {
   return result.affected === 1;
 }
 
+export async function deleteCarsAbovePrice(maxPriceWon: number) {
+  await initializeDatabase();
+  if (!Number.isFinite(maxPriceWon) || maxPriceWon <= 0) return 0;
+
+  const result = await AppDataSource.createQueryBuilder()
+    .delete()
+    .from(Car)
+    .where("price_won > :maxPriceWon", { maxPriceWon: Math.floor(maxPriceWon) })
+    .execute();
+
+  return result.affected ?? 0;
+}
+
+export async function reactivateFilteredOutKbchaCars(filter: {
+  minYear?: number;
+  maxYear?: number;
+  maxMileageKm?: number;
+  maxPriceWon?: number;
+}) {
+  await initializeDatabase();
+
+  const minYear = Number.isFinite(filter.minYear) ? Number(filter.minYear) : null;
+  const maxYear = Number.isFinite(filter.maxYear) ? Number(filter.maxYear) : null;
+  const maxMileageKm = Number.isFinite(filter.maxMileageKm) ? Number(filter.maxMileageKm) : null;
+  const maxPriceWon = Number.isFinite(filter.maxPriceWon) ? Number(filter.maxPriceWon) : null;
+
+  if (minYear == null && maxYear == null && maxMileageKm == null && maxPriceWon == null) {
+    return 0;
+  }
+
+  const whereOutside: string[] = [];
+  const params: Record<string, number | string> = { origin: "kbcha", active: 0 };
+
+  if (minYear != null) {
+    whereOutside.push("year < :minYear");
+    params.minYear = minYear;
+  }
+  if (maxYear != null) {
+    whereOutside.push("year > :maxYear");
+    params.maxYear = maxYear;
+  }
+  if (maxMileageKm != null) {
+    whereOutside.push("mileage_km > :maxMileageKm");
+    params.maxMileageKm = maxMileageKm;
+  }
+  if (maxPriceWon != null) {
+    whereOutside.push("price_won > :maxPriceWon");
+    params.maxPriceWon = maxPriceWon;
+  }
+
+  if (whereOutside.length === 0) return 0;
+
+  const result = await AppDataSource.createQueryBuilder()
+    .update(Car)
+    .set({ isActive: true })
+    .where("origin = :origin", params)
+    .andWhere("is_active = :active", params)
+    .andWhere(`(${whereOutside.join(" OR ")})`, params)
+    .execute();
+
+  return result.affected ?? 0;
+}
+
 export async function getNotificationsFromDb(limit = 100): Promise<NotificationsApiResponse> {
   await initializeDatabase();
   const notificationRepo = AppDataSource.getRepository(Notification);

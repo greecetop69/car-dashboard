@@ -32,7 +32,7 @@ const SEARCH_HEADERS = {
 };
 
 const SEARCH_QUERY =
-  "(And.Hidden.N._.(C.CarType.N._.(C.Manufacturer.\uC544\uC6B0\uB514._.(C.ModelGroup.A3._.Model.\uB274 A3.)))_.Year.range(201700..)._.Price.range(..1400).)";
+  "(And.Hidden.N._.(C.CarType.N._.(C.Manufacturer.\uC544\uC6B0\uB514._.(C.ModelGroup.A3._.Model.\uB274 A3.)))_.Year.range(201700..)._.Price.range(..1450).)";
 
 const PAGE_SIZE: Record<string, number> = { premium: 20, general: 50 };
 const ENDPOINTS = ["premium", "general"];
