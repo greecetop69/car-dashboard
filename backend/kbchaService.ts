@@ -12,6 +12,8 @@ interface KbSearchHit {
   orderDate?: string;
   modelName?: string;
   gradeName?: string;
+  contractingYn?: string;
+  adState?: string;
 }
 
 interface KbSearchResponse {
@@ -37,6 +39,7 @@ const KB_MAX_YEAR = 2020;
 const KB_MAX_KM = 130000;
 const KB_MAX_PRICE_WON = 14500000;
 const KB_MAX_PRICE_MANWON = Math.floor(KB_MAX_PRICE_WON / 10000);
+const ACTIVE_AD_STATES = new Set(["030160"]);
 
 function parseYear(hit: KbSearchHit) {
   if (typeof hit.yymm === "number") return hit.yymm;
@@ -94,6 +97,13 @@ function resolveKbShard(sourceId: string) {
 }
 
 async function normalizeHit(hit: KbSearchHit): Promise<ParsedCarRecord | null> {
+  // KBCHA marks reserved/sold listings in search payload.
+  // Skip them so they are deactivated in our DB on sync.
+  const contractingYn = (hit.contractingYn ?? "").trim().toUpperCase();
+  if (contractingYn === "Y") return null;
+  const adState = (hit.adState ?? "").trim();
+  if (adState && !ACTIVE_AD_STATES.has(adState)) return null;
+
   const sourceId = String(hit.carSeq ?? "").trim();
   if (!sourceId) return null;
 
