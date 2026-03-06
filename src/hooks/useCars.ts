@@ -47,6 +47,7 @@ export function useToggleFavorite() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.cars });
+            queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
         },
     });
 }
