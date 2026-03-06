@@ -19,6 +19,7 @@ import { readJsonBody, sendJson } from "./http.js";
 const PORT = Number(process.env.PORT || 3001);
 const SYNC_TIMEOUT_MS = 180000;
 const MAX_ALLOWED_PRICE_WON = 14500000;
+const STALE_SYNC_THRESHOLD_MS = 6 * 60 * 60 * 1000;
 
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
@@ -132,11 +133,25 @@ function startDailySyncScheduler() {
 }
 
 async function handleCarsRequest(forceRefresh: boolean) {
+  if (syncInFlight) {
+    await syncInFlight;
+  }
+
   const current = await getCarsFromDb();
+  const updatedAtMs = new Date(current.updatedAt).getTime();
+  const isStale =
+    Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs > STALE_SYNC_THRESHOLD_MS;
+
   if (forceRefresh || current.cars.length === 0) {
     await syncCars();
     return getCarsFromDb();
   }
+
+  if (isStale) {
+    await syncCars();
+    return getCarsFromDb();
+  }
+
   return current;
 }
 
@@ -289,6 +304,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
 await runMigrations();
 startDailySyncScheduler();
+void syncCars().catch((error) => {
+  console.error("[sync] Startup sync failed:", error);
+});
 
 server.listen(PORT, () => {
   console.log(`Backend server listening on http://localhost:${PORT}`);
