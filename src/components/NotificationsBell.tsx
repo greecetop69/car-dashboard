@@ -1,4 +1,5 @@
 import { useNotificationsPopover } from "../hooks/useNotificationsPopover";
+import { groupNotificationsByDate } from "../utils/notifications";
 import NotificationListItem from "./notifications/NotificationListItem";
 
 interface Props {
@@ -6,8 +7,19 @@ interface Props {
 }
 
 export default function NotificationsBell({ onNavigateToCar }: Props) {
-  const { rootRef, open, setOpen, items, hasUnread, unreadCount, isFetching, title, handleNotificationClick: onNotificationClick } =
-    useNotificationsPopover({ onNavigateToCar });
+  const {
+    rootRef,
+    open,
+    setOpen,
+    items,
+    hasUnread,
+    unreadCount,
+    isFetching,
+    title,
+    handleNotificationClick: onNotificationClick,
+  } = useNotificationsPopover({ onNavigateToCar });
+
+  const groups = groupNotificationsByDate(items);
 
   return (
     <div ref={rootRef} className="relative">
@@ -39,13 +51,22 @@ export default function NotificationsBell({ onNavigateToCar }: Props) {
             {items.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-slate-400">Пока пусто</div>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {items.map((item) => (
-                  <NotificationListItem
-                    key={item.id}
-                    onClick={() => onNotificationClick(item)}
-                    item={item}
-                  />
+              <div>
+                {groups.map((group) => (
+                  <div key={group.key}>
+                    <div className="sticky top-0 z-10 border-y border-slate-100 bg-slate-50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      {group.label}
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {group.items.map((item) => (
+                        <NotificationListItem
+                          key={item.id}
+                          item={item}
+                          onClick={() => onNotificationClick(item)}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
