@@ -1,5 +1,6 @@
 import { AppDataSource } from "./db/data-source.js";
 import { Car } from "./db/entities/Car.js";
+import { fetchWithTimeout } from "./http.js";
 
 interface InspectionType {
   code?: string | null;
@@ -74,6 +75,7 @@ const INSPECTION_HEADERS = {
 
 const cache = new Map<number, { data: InspectionSummary; cachedAt: number }>();
 const CACHE_TTL_MS = 15 * 60 * 1000;
+const INSPECTION_TIMEOUT_MS = 12000;
 
 function buildInspectionCacheKey(car: Car) {
   return `${car.sourceId}|${car.priceWon}|${car.modifiedDate}|${car.hasInspection ? 1 : 0}`;
@@ -162,9 +164,10 @@ export async function getInspectionSummary(vehicleId: number): Promise<Inspectio
     return cached.data;
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://api.encar.com/v1/readside/inspection/vehicle/${vehicleId}`,
     { headers: INSPECTION_HEADERS },
+    INSPECTION_TIMEOUT_MS,
   );
 
   if (response.status === 404) {
@@ -281,9 +284,10 @@ function getConditionFromOpenRecord(payload: OpenRecordPayload): InspectionCondi
 }
 
 async function getEncarOpenRecordCondition(vehicleId: number): Promise<InspectionConditionKey | null> {
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://api.encar.com/v1/readside/record/vehicle/${vehicleId}/open`,
     { headers: INSPECTION_HEADERS },
+    INSPECTION_TIMEOUT_MS,
   );
 
   if (response.status === 404) return null;

@@ -4,6 +4,7 @@ import { getCaromotoPriceEur } from "../utils/caromoto";
 import { fmtEur, fmtKm, fmtWon } from "../utils/format";
 import DamageBadge from "./car-table/DamageBadge";
 import InspectionModal from "./car-table/InspectionModal";
+import CarPhoto from "./car-table/CarPhoto";
 import PriceHistoryModal from "./car-table/PriceHistoryModal";
 import PriceTrendWon from "./car-table/PriceTrendWon";
 import SortArrow from "./car-table/SortArrow";
@@ -100,18 +101,11 @@ export default function CarTable({
                             <div className="mb-3 flex gap-3">
                                 <div className="relative shrink-0">
                                     {car.mainPhoto ? (
-                                        <img
+                                        <CarPhoto
                                             src={car.mainPhoto}
                                             alt="Фото"
-                                            className={`${mobilePhotoClass} rounded-lg border border-slate-200 object-cover`}
-                                            style={
-                                                isInactive
-                                                    ? {
-                                                          filter: "grayscale(100%) contrast(75%) brightness(75%) saturate(50%)",
-                                                          opacity: 0.65,
-                                                      }
-                                                    : undefined
-                                            }
+                                            className={mobilePhotoClass}
+                                            inactive={isInactive}
                                         />
                                     ) : (
                                         <div
@@ -325,28 +319,13 @@ export default function CarTable({
                                 } ${isNew ? "ring-2 ring-inset ring-emerald-300/80" : ""}`}
                             >
                                 <td className="whitespace-nowrap px-3 py-3">
-                                    <div
-                                        className={`relative overflow-hidden rounded-lg border border-slate-200 h-24 w-40`}
-                                    >
-                                        {car.mainPhoto ? (
-                                            <img
-                                                src={car.mainPhoto}
-                                                alt="Фото"
-                                                className="h-full w-full object-cover"
-                                                style={
-                                                    isInactive
-                                                        ? {
-                                                              filter: "grayscale(100%) contrast(75%) brightness(75%) saturate(50%)",
-                                                              opacity: 0.65,
-                                                          }
-                                                        : undefined
-                                                }
-                                            />
-                                        ) : (
-                                            <div className="flex h-full w-full items-center justify-center bg-slate-100 text-sm text-slate-300">
-                                                нет фото
-                                            </div>
-                                        )}
+                                    <div className="relative h-24 w-40">
+                                        <CarPhoto
+                                            src={car.mainPhoto}
+                                            alt="Фото"
+                                            className="h-24 w-40"
+                                            inactive={isInactive}
+                                        />
 
                                         {isInactive && (
                                             <span className="absolute left-2 top-2 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white shadow-sm">

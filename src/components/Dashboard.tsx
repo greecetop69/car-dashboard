@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCars, useToggleFavorite } from "../hooks/useCars";
+import { useCars, useSyncCars, useToggleFavorite } from "../hooks/useCars";
 import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
 import { fmtKm, fmtWon } from "../utils/format";
@@ -37,6 +37,7 @@ const ORIGIN_FILTER_OPTIONS: Array<{
 export default function Dashboard() {
   const { data, isPending, isError } = useCars();
   const toggleFavoriteMutation = useToggleFavorite();
+  const syncCarsMutation = useSyncCars();
 
   const cars = data?.cars ?? [];
   const activeTotal = useMemo(
@@ -162,6 +163,15 @@ export default function Dashboard() {
     return sorted;
   }, [activeTab, sorted]);
 
+  const activeSortedCount = useMemo(
+    () => sorted.filter((car) => car.isActive !== false).length,
+    [sorted],
+  );
+  const activeFavoriteSortedCount = useMemo(
+    () => sorted.filter((car) => car.isFavorite && car.isActive !== false).length,
+    [sorted],
+  );
+
   function handleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -189,6 +199,17 @@ export default function Dashboard() {
     setYearRange([limits.minYear, limits.maxYear]);
     setMileRange([limits.minMileage, limits.maxMileage]);
     setPriceRange([limits.minPriceWon, limits.maxPriceWon]);
+  }
+
+  if (isPending && !data) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-blue-500" />
+          <span className="text-sm text-slate-600">Загрузка машин...</span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -292,14 +313,23 @@ export default function Dashboard() {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <StatsBar cars={tabFilteredCars} total={activeTotal} />
-            {hasFilters && (
+            <div className="flex items-center gap-3">
               <button
-                onClick={clearAll}
-                className="text-xs text-blue-500 underline underline-offset-2 transition-colors hover:text-blue-700"
+                onClick={() => syncCarsMutation.mutate()}
+                disabled={syncCarsMutation.isPending}
+                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Сбросить все фильтры
+                {syncCarsMutation.isPending ? "Обновление..." : "Обновить"}
               </button>
-            )}
+              {hasFilters && (
+                <button
+                  onClick={clearAll}
+                  className="text-xs text-blue-500 underline underline-offset-2 transition-colors hover:text-blue-700"
+                >
+                  Сбросить все фильтры
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -324,7 +354,7 @@ export default function Dashboard() {
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
               }`}
             >
-              Все ({sorted.length})
+              Все ({activeSortedCount})
             </button>
             <button
               onClick={() => setActiveTab("favorites")}
@@ -334,7 +364,7 @@ export default function Dashboard() {
                   : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
               }`}
             >
-              Избранное ({sorted.filter((car) => car.isFavorite).length})
+              Избранное ({activeFavoriteSortedCount})
             </button>
           </div>
           <CarTable
@@ -358,3 +388,6 @@ export default function Dashboard() {
     </div>
   );
 }
+
+
+

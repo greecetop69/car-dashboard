@@ -5,47 +5,108 @@ import { fetchEncarCars } from "./encarService.js";
 import { fetchKbchaCars } from "./kbchaService.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import type { CarOrigin } from "./carSources.js";
+import { readJsonBody, sendJson } from "./http.js";
 
 const PORT = Number(process.env.PORT || 3001);
+const SYNC_TIMEOUT_MS = 180000;
 
-let syncInFlight: Promise<void> | null = null;
+let syncInFlight: Promise<SyncResult> | null = null;
+let syncTimer: NodeJS.Timeout | null = null;
 
-function sendJson(res: ServerResponse, statusCode: number, payload: unknown) {
-  res.writeHead(statusCode, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timeout: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
   });
-  res.end(JSON.stringify(payload));
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  }) as Promise<T>;
 }
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-  }
-  if (chunks.length === 0) return {};
-  const raw = Buffer.concat(chunks).toString("utf-8").trim();
-  if (!raw) return {};
-  return JSON.parse(raw);
+interface SyncResult {
+  syncedCars: number;
+  updatedAt: string;
 }
 
-async function syncCars() {
+async function syncCars(): Promise<SyncResult> {
   if (syncInFlight) return syncInFlight;
 
-  syncInFlight = (async () => {
-    const [encar, kbcha] = await Promise.all([fetchEncarCars(), fetchKbchaCars()]);
-    const deactivateOrigins: CarOrigin[] = [];
-    if (encar.cars.length > 0) deactivateOrigins.push("encar");
-    if (kbcha.cars.length > 0) deactivateOrigins.push("kbcha");
+  syncInFlight = (async (): Promise<SyncResult> => {
+    let syncedCars = 0;
+    await withTimeout(
+      (async () => {
+        const [encar, kbcha] = await Promise.all([fetchEncarCars(), fetchKbchaCars()]);
+        syncedCars = encar.cars.length + kbcha.cars.length;
+        const deactivateOrigins: CarOrigin[] = [];
+        if (encar.cars.length > 0) deactivateOrigins.push("encar");
+        if (kbcha.cars.length > 0) deactivateOrigins.push("kbcha");
 
-    await saveParsedCars([...encar.cars, ...kbcha.cars], { deactivateOrigins });
-  })().finally(() => {
-    syncInFlight = null;
-  });
+        await saveParsedCars([...encar.cars, ...kbcha.cars], { deactivateOrigins });
+      })(),
+      SYNC_TIMEOUT_MS,
+      "Sync timeout exceeded",
+    );
+    return {
+      syncedCars,
+      updatedAt: new Date().toISOString(),
+    };
+  })()
+    .catch((error) => {
+      throw error;
+    })
+    .finally(() => {
+      syncInFlight = null;
+    });
 
   return syncInFlight;
+}
+
+function getKishinevNowParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Chisinau",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const read = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return {
+    year: read("year"),
+    month: read("month"),
+    day: read("day"),
+    hour: read("hour"),
+    minute: read("minute"),
+  };
+}
+
+function startDailySyncScheduler() {
+  let lastRunDate = "";
+
+  const tick = async () => {
+    const now = getKishinevNowParts();
+    const dateKey = `${now.year}-${now.month}-${now.day}`;
+    const shouldRun = now.hour === "07" && now.minute === "30";
+
+    if (!shouldRun || lastRunDate === dateKey) return;
+
+    lastRunDate = dateKey;
+    try {
+      await syncCars();
+      console.log(`[sync] Daily sync completed at 07:30 Europe/Chisinau (${dateKey})`);
+    } catch (error) {
+      console.error("[sync] Daily sync failed:", error);
+    }
+  };
+
+  void tick();
+  syncTimer = setInterval(() => {
+    void tick();
+  }, 30_000);
+  syncTimer.unref();
 }
 
 async function handleCarsRequest(forceRefresh: boolean) {
@@ -77,12 +138,11 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
   if (req.method === "POST" && url.pathname === "/api/sync") {
     try {
-      await syncCars();
-      const data = await getCarsFromDb();
+      const result = await syncCars();
       sendJson(res, 200, {
         status: "ok",
-        syncedCars: data.meta.count,
-        updatedAt: data.updatedAt,
+        syncedCars: result.syncedCars,
+        updatedAt: result.updatedAt,
       });
     } catch (error) {
       sendJson(res, 500, {
@@ -173,6 +233,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 });
 
 await runMigrations();
+startDailySyncScheduler();
 
 server.listen(PORT, () => {
   console.log(`Backend server listening on http://localhost:${PORT}`);

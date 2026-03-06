@@ -6,6 +6,10 @@ import { getWonToEurRate } from "./fx.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import { In } from "typeorm";
 
+const ENABLE_INSPECTION_BACKFILL_ON_READ = ["1", "true", "yes"].includes(
+  (process.env.ENABLE_INSPECTION_BACKFILL_ON_READ ?? "").toLowerCase(),
+);
+
 export interface PriceHistoryRow {
   priceWon: number;
   recordedAt: string;
@@ -320,12 +324,14 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
 
   // Backfill inspection condition only for missing Encar rows.
   // If condition is already set in DB, no external requests are made.
-  const missingEncarInspection = rows.filter((row) => {
-    const hasInspection = toBoolFlag(row.has_inspection);
-    return row.origin === "encar" && hasInspection && row.inspection_condition == null;
-  });
+  const missingEncarInspection = ENABLE_INSPECTION_BACKFILL_ON_READ
+    ? rows.filter((row) => {
+        const hasInspection = toBoolFlag(row.has_inspection);
+        return row.origin === "encar" && hasInspection && row.inspection_condition == null;
+      })
+    : [];
 
-  if (missingEncarInspection.length > 0) {
+  if (ENABLE_INSPECTION_BACKFILL_ON_READ && missingEncarInspection.length > 0) {
     const queue = [...missingEncarInspection];
     const workerCount = Math.min(3, queue.length);
     await Promise.all(

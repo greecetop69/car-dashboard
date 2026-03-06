@@ -42,6 +42,24 @@ npm run dev
 Frontend: `http://localhost:5173`  
 Backend: `http://localhost:3001`
 
+## Frontend env (dev/prod)
+
+Frontend uses Vite modes:
+- `npm run dev` -> mode `dev` -> reads `.env.dev`
+- `npm run build` / `npm run preview` -> mode `prod` -> reads `.env.prod`
+
+Example values:
+
+```env
+# .env.dev
+VITE_API_URL=http://localhost:3001
+```
+
+```env
+# .env.prod
+VITE_API_URL=https://car-dashboard-production-01b8.up.railway.app
+```
+
 ## Переменные backend
 
 Пример в `backend/.env.example`:
@@ -53,6 +71,7 @@ DB_PORT=3306
 DB_USER=car_user
 DB_PASSWORD=car_password
 DB_NAME=car_dashboard
+ENABLE_INSPECTION_BACKFILL_ON_READ=false
 ```
 
 ## API

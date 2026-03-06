@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --mode dev",
     "backend": "npm --prefix backend run dev",
     "backend:build": "npm --prefix backend run build",
     "backend:start": "npm --prefix backend run start",
@@ -13,8 +13,8 @@
     "db:logs": "npm --prefix backend run db:logs",
     "db:dump": "npm --prefix backend run db:dump",
     "db:import": "npm --prefix backend run db:import",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build --mode prod",
+    "preview": "vite preview --mode prod"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",

@@ -1,4 +1,5 @@
 import { mapEncar, type CarPhoto, type ParsedCarRecord, type ParsedCarsResponse } from "./carSources.js";
+import { fetchWithTimeout } from "./http.js";
 
 interface RawPhoto {
   type?: string;
@@ -36,6 +37,7 @@ const SEARCH_QUERY =
 const PAGE_SIZE: Record<string, number> = { premium: 20, general: 50 };
 const ENDPOINTS = ["premium", "general"];
 const PHOTO_BASE = "https://ci.encar.com";
+const REQUEST_TIMEOUT_MS = 15000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -86,9 +88,13 @@ async function fetchOnePage(type: string, offset: number) {
     sr: `|ModifiedDate|${offset}|${PAGE_SIZE[type]}`,
   });
 
-  const response = await fetch(`${url}?${params.toString()}`, {
-    headers: SEARCH_HEADERS,
-  });
+  const response = await fetchWithTimeout(
+    `${url}?${params.toString()}`,
+    {
+      headers: SEARCH_HEADERS,
+    },
+    REQUEST_TIMEOUT_MS,
+  );
 
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} while fetching ${type}/${offset}`);

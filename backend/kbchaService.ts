@@ -1,4 +1,5 @@
 import { mapKbcha, type CarPhoto, type ParsedCarRecord, type ParsedCarsResponse } from "./carSources.js";
+import { fetchWithTimeout } from "./http.js";
 
 interface KbSearchHit {
   carSeq?: number;
@@ -30,8 +31,7 @@ const KB_HEADERS = {
 };
 
 const KB_SEARCH_BASE_URL = "https://m.kbchachacha.com/public/web/search/infinitySearch.json";
-const KB_IMAGE_SHARDS = Array.from({ length: 31 }, (_, idx) => String(idx).padStart(2, "0"));
-const kbShardByGroup = new Map<string, string>();
+const SEARCH_TIMEOUT_MS = 15000;
 
 function parseYear(hit: KbSearchHit) {
   if (typeof hit.yymm === "number") return hit.yymm;
@@ -49,7 +49,7 @@ function parseYear(hit: KbSearchHit) {
 function toKishinevTime(raw?: string) {
   if (!raw) return "";
   const iso = raw.includes("T") ? raw : raw.replace(" ", "T");
-  const withOffset = /[+-]\d{2}:\d{2}$/.test(iso) ? iso : `${iso}+09:00`;
+  const withOffset = /(?:[+-]\d{2}:\d{2}|Z)$/i.test(iso) ? iso : `${iso}+09:00`;
   const date = new Date(withOffset);
   if (Number.isNaN(date.getTime())) return raw;
   return date.toLocaleString("ru-RU", { timeZone: "Europe/Chisinau" });
@@ -78,32 +78,12 @@ function makeKbPhotoUrl(sourceId: string, fileName: string, shard: string) {
   return `https://img.kbchachacha.com/IMG/carimg/l/img${shard}/img${group}/${fileName}?width=720`;
 }
 
-async function resolveKbShard(sourceId: string, firstFileName: string) {
+function resolveKbShard(sourceId: string) {
   const group = sourceId.slice(0, 4);
-  const cachedShard = kbShardByGroup.get(group);
-  if (cachedShard) {
-    const cachedUrl = makeKbPhotoUrl(sourceId, firstFileName, cachedShard);
-    try {
-      const cachedResponse = await fetch(cachedUrl, { method: "HEAD" });
-      if (cachedResponse.ok) return cachedShard;
-    } catch {
-      // fallback to full scan
-    }
-  }
-
-  for (const shard of KB_IMAGE_SHARDS) {
-    const candidate = makeKbPhotoUrl(sourceId, firstFileName, shard);
-    try {
-      const response = await fetch(candidate, { method: "HEAD" });
-      if (response.ok) {
-        kbShardByGroup.set(group, shard);
-        return shard;
-      }
-    } catch {
-      // try next shard
-    }
-  }
-  return null;
+  if (group.length < 4) return "01";
+  const lastDigit = Number(group[3]);
+  if (!Number.isInteger(lastDigit) || lastDigit < 0 || lastDigit > 9) return "01";
+  return lastDigit === 0 ? "10" : String(lastDigit).padStart(2, "0");
 }
 
 async function normalizeHit(hit: KbSearchHit): Promise<ParsedCarRecord | null> {
@@ -119,10 +99,9 @@ async function normalizeHit(hit: KbSearchHit): Promise<ParsedCarRecord | null> {
   const grade = hit.gradeName?.trim();
   const badge = [model, grade].filter(Boolean).join(" ");
   const fileNames = (hit.fileNameArray ?? []).filter((item) => typeof item === "string" && item.length > 0);
-  const firstFileName = fileNames[0] ?? null;
-  const resolvedShard = firstFileName ? await resolveKbShard(sourceId, firstFileName) : null;
+  const resolvedShard = resolveKbShard(sourceId);
   const photos: CarPhoto[] =
-    resolvedShard == null
+    fileNames.length === 0
       ? []
       : fileNames.map((fileName, idx) => ({
           type: String(idx + 1).padStart(3, "0"),
@@ -150,9 +129,13 @@ export async function fetchKbchaCars(): Promise<ParsedCarsResponse> {
   let searchAfter = "";
 
   for (let page = 0; page < 30; page += 1) {
-    const response = await fetch(buildKbSearchUrl(searchAfter), {
-      headers: KB_HEADERS,
-    });
+    const response = await fetchWithTimeout(
+      buildKbSearchUrl(searchAfter),
+      {
+        headers: KB_HEADERS,
+      },
+      SEARCH_TIMEOUT_MS,
+    );
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} while fetching kbcha cars`);
