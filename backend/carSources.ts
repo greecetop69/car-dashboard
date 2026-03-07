@@ -88,7 +88,7 @@ export function mapKbcha(input: KbchaMapInput): ParsedCarRecord | null {
   const hasAccidentCount = accidentCount != null && Number.isFinite(accidentCount) && accidentCount >= 0;
   const inspectionCondition =
     hasAccidentCount ? (accidentCount > 0 ? "repair" : "clean") : null;
-  const detailUrl = `https://m.kbchachacha.com/public/web/car/detail.kbc?carSeq=${input.sourceId}`;
+  const detailUrl = `https://kbchachacha.com/public/web/car/detail.kbc?carSeq=${input.sourceId}`;
 
   return {
     origin: "kbcha",

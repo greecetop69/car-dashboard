@@ -27,12 +27,18 @@ interface KbSearchResponse {
 const KB_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-  Referer: "https://m.kbchachacha.com/",
-  Origin: "https://m.kbchachacha.com",
+  Referer: "https://www.kbchachacha.com/",
+  Origin: "https://www.kbchachacha.com",
   Accept: "application/json",
 };
 
-const KB_SEARCH_BASE_URL = "https://m.kbchachacha.com/public/web/search/infinitySearch.json";
+const KB_SEARCH_ENDPOINTS: readonly string[] = [
+  "https://www.kbchachacha.com/public/web/search/infinitySearch.json",
+  "https://www.kbchachacha.com/public/web/search/infinitySearch.kbc",
+  "https://www.kbchachacha.com/public/search/infinitySearch.json",
+  "https://www.kbchachacha.com/public/search/infinitySearch.kbc",
+];
+const KB_LIST_BASE_URL = "https://www.kbchachacha.com/public/search/list.empty";
 const SEARCH_TIMEOUT_MS = 15000;
 const KB_MIN_YEAR = 2017;
 const KB_MAX_YEAR = 2020;
@@ -63,7 +69,7 @@ function toKishinevTime(raw?: string) {
   return date.toLocaleString("ru-RU", { timeZone: "Europe/Chisinau" });
 }
 
-function buildKbSearchUrl(searchAfter: string) {
+function buildKbSearchUrl(baseUrl: string, searchAfter: string) {
   const params = new URLSearchParams({
     makerCode: "109",
     classCode: "1941",
@@ -80,7 +86,20 @@ function buildKbSearchUrl(searchAfter: string) {
     v: String(Date.now()),
     searchAfter,
   });
-  return `${KB_SEARCH_BASE_URL}?${params.toString()}`;
+  return `${baseUrl}?${params.toString()}`;
+}
+
+function buildKbListUrl(page: number) {
+  const params = new URLSearchParams({
+    makerCode: "109",
+    classCode: "1941",
+    carCode: "1552",
+    page: String(page),
+    regiDay: `${KB_MIN_YEAR},${KB_MAX_YEAR}`,
+    sellAmt: `,${KB_MAX_PRICE_MANWON}`,
+    km: `,${KB_MAX_KM}`,
+  });
+  return `${KB_LIST_BASE_URL}?${params.toString()}`;
 }
 
 function makeKbPhotoUrl(sourceId: string, fileName: string, shard: string) {
@@ -141,24 +160,162 @@ async function normalizeHit(hit: KbSearchHit): Promise<ParsedCarRecord | null> {
   });
 }
 
-export async function fetchKbchaCars(): Promise<ParsedCarsResponse> {
-  const cars: ParsedCarRecord[] = [];
-  let searchAfter = "";
+function stripHtmlTags(raw: string) {
+  return raw.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
 
-  for (let page = 0; page < 30; page += 1) {
+function decodeHtmlEntities(raw: string) {
+  return raw
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, "\"")
+    .replace(/&#39;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function parseYearFromLabel(label: string) {
+  const match = label.match(/(\d{2})\/\d{2}식/);
+  if (!match) return 0;
+  const yy = Number(match[1]);
+  if (!Number.isInteger(yy)) return 0;
+  return yy >= 90 ? 1900 + yy : 2000 + yy;
+}
+
+function parseFirstMatch(block: string, re: RegExp) {
+  const match = block.match(re);
+  if (!match) return "";
+  return decodeHtmlEntities(stripHtmlTags(match[1] ?? ""));
+}
+
+function parseListPageCars(html: string): ParsedCarRecord[] {
+  const chunks = html.split('<div class="area ').slice(1);
+  const parsed: ParsedCarRecord[] = [];
+  const seen = new Set<string>();
+
+  for (const chunk of chunks) {
+    const block = `<div class="area ${chunk}`;
+    const sourceId = parseFirstMatch(block, /data-car-seq="(\d+)"/i);
+    if (!sourceId || seen.has(sourceId)) continue;
+    seen.add(sourceId);
+
+    const title = parseFirstMatch(block, /<strong class="tit">([\s\S]*?)<\/strong>/i);
+    const dataLineMatch = block.match(/<div class="data-line">([\s\S]*?)<\/div>/i);
+    const dataLineRaw = dataLineMatch?.[1] ?? "";
+    const spans = Array.from(dataLineRaw.matchAll(/<span>([\s\S]*?)<\/span>/gi)).map((item) =>
+      decodeHtmlEntities(stripHtmlTags(item[1] ?? "")),
+    );
+    const year = parseYearFromLabel(spans[0] ?? "");
+    const mileageKm = Number((spans[1] ?? "").replace(/[^\d]/g, ""));
+
+    const priceRaw = parseFirstMatch(block, /<span class="price">([\s\S]*?)<\/span>/i);
+    const sellAmt = Number(priceRaw.replace(/[^\d]/g, ""));
+    const photoUrl = parseFirstMatch(block, /<img[^>]+src="([^"]+)"/i);
+
+    const mapped = mapKbcha({
+      sourceId,
+      year: Number.isFinite(year) ? year : 0,
+      mileageKm: Number.isFinite(mileageKm) ? mileageKm : 0,
+      sellAmt,
+      accidentCount: null,
+      mainPhoto: photoUrl || null,
+      photos: photoUrl
+        ? [
+            {
+              type: "001",
+              location: photoUrl,
+              updatedDate: "",
+              ordering: 1,
+            },
+          ]
+        : [],
+      badge: title,
+      modifiedDate: "",
+    });
+
+    if (mapped) parsed.push(mapped);
+  }
+
+  return parsed;
+}
+
+async function fetchKbchaCarsFromListHtml() {
+  const cars: ParsedCarRecord[] = [];
+  const seen = new Set<string>();
+  const htmlHeaders = { ...KB_HEADERS, Accept: "text/html, */*;q=0.8" };
+
+  for (let page = 1; page <= 30; page += 1) {
     const response = await fetchWithTimeout(
-      buildKbSearchUrl(searchAfter),
+      buildKbListUrl(page),
       {
-        headers: KB_HEADERS,
+        headers: htmlHeaders,
       },
       SEARCH_TIMEOUT_MS,
     );
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status} while fetching kbcha cars`);
+      throw new Error(`HTTP ${response.status} while fetching kbcha cars from list.empty`);
     }
 
-    const payload = (await response.json()) as KbSearchResponse;
+    const html = await response.text();
+    const pageCars = parseListPageCars(html);
+    if (pageCars.length === 0) break;
+
+    let addedOnPage = 0;
+    for (const car of pageCars) {
+      if (seen.has(car.sourceId)) continue;
+      seen.add(car.sourceId);
+      cars.push(car);
+      addedOnPage += 1;
+    }
+
+    if (addedOnPage === 0) break;
+  }
+
+  return cars;
+}
+
+async function fetchKbchaCarsFromJsonSearch() {
+  const cars: ParsedCarRecord[] = [];
+  let searchAfter = "";
+  let activeEndpoint: string | null = null;
+
+  for (let page = 0; page < 30; page += 1) {
+    let payload: KbSearchResponse | null = null;
+    let selectedEndpoint: string | null = null;
+    let lastNon404Status: number | null = null;
+
+    const endpointsToTry: readonly string[] = activeEndpoint
+      ? [activeEndpoint]
+      : KB_SEARCH_ENDPOINTS;
+    for (const endpoint of endpointsToTry) {
+      const response = await fetchWithTimeout(
+        buildKbSearchUrl(endpoint, searchAfter),
+        {
+          headers: KB_HEADERS,
+        },
+        SEARCH_TIMEOUT_MS,
+      );
+
+      if (response.ok) {
+        payload = (await response.json()) as KbSearchResponse;
+        selectedEndpoint = endpoint;
+        break;
+      }
+
+      if (response.status !== 404) {
+        lastNon404Status = response.status;
+      }
+    }
+
+    if (!payload || !selectedEndpoint) {
+      if (lastNon404Status != null) {
+        throw new Error(`HTTP ${lastNon404Status} while fetching kbcha cars`);
+      }
+      throw new Error(`HTTP 404 while fetching kbcha cars (tried: ${KB_SEARCH_ENDPOINTS.join(", ")})`);
+    }
+
+    activeEndpoint = selectedEndpoint;
     const hits = payload.result?.hits ?? [];
     if (hits.length === 0) break;
 
@@ -174,6 +331,17 @@ export async function fetchKbchaCars(): Promise<ParsedCarsResponse> {
 
     if (!nextSearchAfter || nextSearchAfter === searchAfter) break;
     searchAfter = nextSearchAfter;
+  }
+
+  return cars;
+}
+
+export async function fetchKbchaCars(): Promise<ParsedCarsResponse> {
+  let cars: ParsedCarRecord[];
+  try {
+    cars = await fetchKbchaCarsFromJsonSearch();
+  } catch {
+    cars = await fetchKbchaCarsFromListHtml();
   }
 
   return {
