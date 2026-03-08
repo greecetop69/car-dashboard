@@ -11,6 +11,7 @@ import {
   buildPriceDropNotification,
   type PendingNotification,
 } from "./notificationFactories.js";
+import { sendTelegramNotifications } from "./telegram.js";
 import { In } from "typeorm";
 
 const ENABLE_INSPECTION_BACKFILL_ON_READ = ["1", "true", "yes"].includes(
@@ -166,6 +167,71 @@ function dedupeParsedCarsByOriginSource(parsedCars: ParsedCarRecord[]) {
   return [...map.values()];
 }
 
+function deliverTelegramAsync(items: PendingNotification[]) {
+  if (items.length === 0) return;
+  void sendTelegramNotifications(items).catch((error) => {
+    console.error("[telegram] Failed to send notifications:", error);
+  });
+}
+
+interface NotificationCarFallbackRow {
+  origin: CarOrigin;
+  sourceId: string;
+  mainPhoto: string | null;
+  url: string;
+}
+
+function buildNotificationCarPair(origin: CarOrigin | null, sourceId: string | null) {
+  if (!origin || !sourceId) return null;
+  return `${origin}:${sourceId}`;
+}
+
+async function loadNotificationCarFallbacks(
+  pairs: string[],
+): Promise<Map<string, { mainPhoto: string | null; url: string }>> {
+  const uniquePairs = [...new Set(pairs)];
+  const result = new Map<string, { mainPhoto: string | null; url: string }>();
+  if (uniquePairs.length === 0) return result;
+
+  const clauses = uniquePairs.map(() => "(origin = ? AND source_id = ?)").join(" OR ");
+  const params = uniquePairs.flatMap((pair) => {
+    const [origin, sourceId] = pair.split(":");
+    return [origin, sourceId];
+  });
+
+  const carRows = await AppDataSource.getRepository(Car).query(
+    `SELECT origin, source_id AS sourceId, main_photo AS mainPhoto, url
+     FROM cars
+     WHERE ${clauses}`,
+    params,
+  );
+
+  for (const car of carRows as NotificationCarFallbackRow[]) {
+    result.set(`${car.origin}:${car.sourceId}`, {
+      mainPhoto: car.mainPhoto,
+      url: car.url,
+    });
+  }
+  return result;
+}
+
+function enrichNotificationPayload(
+  payloadJson: unknown,
+  fallback?: { mainPhoto: string | null; url: string },
+) {
+  const payload =
+    payloadJson && typeof payloadJson === "object"
+      ? { ...(payloadJson as Record<string, unknown>) }
+      : ({} as Record<string, unknown>);
+
+  const hasMainPhoto =
+    typeof payload.mainPhoto === "string" && payload.mainPhoto.trim().length > 0;
+  const hasUrl = typeof payload.url === "string" && payload.url.trim().length > 0;
+  if (!hasMainPhoto && fallback?.mainPhoto) payload.mainPhoto = fallback.mainPhoto;
+  if (!hasUrl && fallback?.url) payload.url = fallback.url;
+  return Object.keys(payload).length > 0 ? payload : null;
+}
+
 export async function saveParsedCars(
   parsedCars: ParsedCarRecord[],
   options?: { deactivateOrigins?: CarOrigin[] },
@@ -174,6 +240,7 @@ export async function saveParsedCars(
   const syncSeenAt = new Date();
   const deactivateBefore = new Date(syncSeenAt.getTime() - DEACTIVATION_GRACE_HOURS * 60 * 60 * 1000);
   const uniqueParsedCars = dedupeParsedCarsByOriginSource(parsedCars);
+  const pendingNotificationsForDelivery: PendingNotification[] = [];
   const deactivateOrigins =
     options?.deactivateOrigins?.filter((item, idx, arr) => arr.indexOf(item) === idx) ??
     ["encar", "kbcha"];
@@ -273,6 +340,7 @@ export async function saveParsedCars(
           "c.source_id AS sourceId",
           "c.price_won AS priceWon",
           "c.url AS url",
+          "c.main_photo AS mainPhoto",
         ])
         .where("c.origin IN (:...origins)", { origins: deactivateOrigins })
         .andWhere("CONCAT(c.origin, ':', c.source_id) NOT IN (:...seenKeys)", { seenKeys })
@@ -280,7 +348,13 @@ export async function saveParsedCars(
         .andWhere("(c.last_seen_at IS NULL OR c.last_seen_at < :deactivateBefore)", {
           deactivateBefore,
         })
-        .getRawMany<{ origin: CarOrigin; sourceId: string; priceWon: string; url: string }>();
+        .getRawMany<{
+          origin: CarOrigin;
+          sourceId: string;
+          priceWon: string;
+          url: string;
+          mainPhoto: string | null;
+        }>();
 
       await manager
         .createQueryBuilder()
@@ -302,6 +376,7 @@ export async function saveParsedCars(
             sourceId: row.sourceId,
             priceWon: Number.isFinite(priceWon) ? priceWon : null,
             url: row.url,
+            mainPhoto: row.mainPhoto,
           }),
         );
       }
@@ -338,8 +413,11 @@ export async function saveParsedCars(
           }),
         ),
       );
+      pendingNotificationsForDelivery.push(...notificationsToInsert);
     }
   });
+
+  deliverTelegramAsync(pendingNotificationsForDelivery);
 }
 
 function buildMeta(cars: CarRow[]) {
@@ -645,6 +723,7 @@ export async function deactivateMissingPartialOriginCars(params: {
   if (seenSourceIds.length === 0) return 0;
 
   let affected = 0;
+  const pendingNotificationsForDelivery: PendingNotification[] = [];
   await AppDataSource.transaction(async (manager) => {
     const notificationRepo = manager.getRepository(Notification);
 
@@ -656,6 +735,7 @@ export async function deactivateMissingPartialOriginCars(params: {
         "c.source_id AS sourceId",
         "c.price_won AS priceWon",
         "c.url AS url",
+        "c.main_photo AS mainPhoto",
       ])
       .where("c.origin = :origin", { origin })
       .andWhere("c.is_active = :isActive", { isActive: true })
@@ -675,6 +755,7 @@ export async function deactivateMissingPartialOriginCars(params: {
       sourceId: string;
       priceWon: string;
       url: string;
+      mainPhoto: string | null;
     }>();
 
     const updateQb = manager
@@ -698,22 +779,30 @@ export async function deactivateMissingPartialOriginCars(params: {
     affected = result.affected ?? 0;
 
     if (toDeactivate.length > 0) {
+      const notifications = toDeactivate.map((row) =>
+        buildCarSoldNotification({
+          origin: row.origin,
+          sourceId: row.sourceId,
+          priceWon: Number.isFinite(Number(row.priceWon)) ? Number(row.priceWon) : null,
+          url: row.url,
+          mainPhoto: row.mainPhoto,
+        }),
+      );
+
       await notificationRepo.save(
-        toDeactivate.map((row) =>
+        notifications.map((item) =>
           notificationRepo.create({
-            ...buildCarSoldNotification({
-              origin: row.origin,
-              sourceId: row.sourceId,
-              priceWon: Number.isFinite(Number(row.priceWon)) ? Number(row.priceWon) : null,
-              url: row.url,
-            }),
+            ...item,
             isRead: false,
             readAt: null,
           }),
         ),
       );
+      pendingNotificationsForDelivery.push(...notifications);
     }
   });
+
+  deliverTelegramAsync(pendingNotificationsForDelivery);
 
   return affected;
 }
@@ -732,22 +821,28 @@ export async function getNotificationsFromDb(limit = 100): Promise<Notifications
     where: { isRead: false },
   });
 
+  const carPairs = rows
+    .map((row) => buildNotificationCarPair(row.carOrigin, row.carSourceId))
+    .filter((pair): pair is string => Boolean(pair));
+  const carsByPair = await loadNotificationCarFallbacks(carPairs);
+
   return {
-    items: rows.map((row) => ({
-      id: Number(row.id),
-      type: row.type,
-      carOrigin: row.carOrigin,
-      carSourceId: row.carSourceId,
-      title: row.title,
-      message: row.message,
-      payload:
-        row.payloadJson && typeof row.payloadJson === "object"
-          ? (row.payloadJson as Record<string, unknown>)
-          : null,
-      isRead: toBoolFlag(row.isRead),
-      createdAt: row.createdAt.toISOString(),
-      readAt: row.readAt ? row.readAt.toISOString() : null,
-    })),
+    items: rows.map((row) => {
+      const key = buildNotificationCarPair(row.carOrigin, row.carSourceId);
+      const fallback = key ? carsByPair.get(key) : undefined;
+      return {
+        id: Number(row.id),
+        type: row.type,
+        carOrigin: row.carOrigin,
+        carSourceId: row.carSourceId,
+        title: row.title,
+        message: row.message,
+        payload: enrichNotificationPayload(row.payloadJson, fallback),
+        isRead: toBoolFlag(row.isRead),
+        createdAt: row.createdAt.toISOString(),
+        readAt: row.readAt ? row.readAt.toISOString() : null,
+      };
+    }),
     unreadCount,
   };
 }

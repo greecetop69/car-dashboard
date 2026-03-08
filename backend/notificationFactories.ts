@@ -26,6 +26,7 @@ export function buildNewCarNotification(parsed: ParsedCarRecord): PendingNotific
       mileageKm: parsed.mileageKm,
       priceWon: parsed.priceWon,
       url: parsed.url,
+      mainPhoto: parsed.mainPhoto,
     },
   };
 }
@@ -45,6 +46,7 @@ export function buildPriceDropNotification(
       newPriceWon: parsed.priceWon,
       deltaWon: previousPriceWon - parsed.priceWon,
       url: parsed.url,
+      mainPhoto: parsed.mainPhoto,
     },
   };
 }
@@ -54,6 +56,7 @@ export function buildCarSoldNotification(input: {
   sourceId: string;
   priceWon: number | null;
   url: string;
+  mainPhoto?: string | null;
 }): PendingNotification {
   return {
     type: "car_sold",
@@ -64,6 +67,7 @@ export function buildCarSoldNotification(input: {
     payloadJson: {
       priceWon: input.priceWon,
       url: input.url,
+      mainPhoto: input.mainPhoto ?? null,
     },
   };
 }

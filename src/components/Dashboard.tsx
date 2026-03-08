@@ -250,7 +250,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-[1680px] px-5 py-10">
+      <div className="mx-auto max-w-[1680px] px-3 py-6 md:px-4 md:py-8 xl:px-5 xl:py-10">
         <div className="mb-7">
           <div className="mb-1 flex items-center justify-between gap-2.5">
             <h1 className="text-2xl font-semibold tracking-tight text-slate-800">

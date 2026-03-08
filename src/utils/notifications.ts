@@ -10,6 +10,13 @@ export function isNotificationNavigable(item: NotificationItem) {
   return Boolean(item.carOrigin && item.carSourceId);
 }
 
+export function getNotificationPhotoUrl(item: NotificationItem): string | null {
+  const payload = item.payload;
+  if (!payload || typeof payload !== "object") return null;
+  const raw = (payload as Record<string, unknown>).mainPhoto;
+  return typeof raw === "string" && raw.trim().length > 0 ? raw.trim() : null;
+}
+
 export interface NotificationDateGroup {
   key: string;
   label: string;

@@ -59,7 +59,7 @@ export default function CarTable({
             : { label: "ENCAR", className: "bg-red-600 text-white" };
 
     return (
-        <div className="w-full overflow-x-hidden">
+        <div className="w-full">
             <div className="space-y-3 p-3 md:hidden">
                 {cars.length === 0 && (
                     <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-400">
@@ -205,15 +205,16 @@ export default function CarTable({
                 })}
             </div>
 
-            <table className="hidden w-full border-collapse text-base md:table">
+            <div className="hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[1640px] border-collapse text-sm xl:text-base [&_th]:px-2 [&_td]:px-2 xl:[&_th]:px-3 xl:[&_td]:px-3">
                 <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
-                        <th className="w-[180px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <th className="w-[180px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Фото
                         </th>
                         <th
                             onClick={() => onSort("sourceId")}
-                            className={`w-[90px] cursor-pointer select-none whitespace-nowrap px-3 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                            className={`w-[90px] cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                                 sortKey === "sourceId"
                                     ? "text-blue-600"
                                     : "text-slate-400 hover:text-slate-700"
@@ -229,7 +230,7 @@ export default function CarTable({
                             <th
                                 key={col.key}
                                 onClick={() => onSort(col.key)}
-                                className={`cursor-pointer select-none whitespace-nowrap px-3 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                                className={`cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                                     sortKey === col.key
                                         ? "text-blue-600"
                                         : "text-slate-400 hover:text-slate-700"
@@ -252,7 +253,7 @@ export default function CarTable({
                         ))}
                         <th
                             onClick={() => onSort("caromotoPrice")}
-                            className={`w-[190px] cursor-pointer select-none whitespace-nowrap px-3 py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                            className={`w-[190px] cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                                 sortKey === "caromotoPrice"
                                     ? "text-blue-600"
                                     : "text-slate-400 hover:text-slate-700"
@@ -264,19 +265,19 @@ export default function CarTable({
                                 dir={sortDir}
                             />
                         </th>
-                        <th className="w-[250px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <th className="w-[160px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Обновлено
                         </th>
-                        <th className="w-[220px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <th className="w-[220px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Статус кузова
                         </th>
-                        <th className="w-[168px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <th className="w-[168px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Инспекция
                         </th>
-                        <th className="w-[90px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <th className="w-[90px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Избр.
                         </th>
-                        <th className="w-[140px] px-3 py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <th className="w-[140px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                             Ссылка
                         </th>
                     </tr>
@@ -326,7 +327,7 @@ export default function CarTable({
                                             : "cursor-pointer bg-slate-50/50 hover:bg-slate-100/70"
                                 } ${isNew ? "ring-2 ring-inset ring-emerald-300/80" : ""}`}
                             >
-                                <td className="whitespace-nowrap px-3 py-3">
+                                <td className="whitespace-nowrap py-3">
                                     <div className="relative h-24 w-40">
                                         <CarPhoto
                                             src={car.mainPhoto}
@@ -353,27 +354,27 @@ export default function CarTable({
                                     </div>
                                 </td>
                                 <td
-                                    className={`w-[90px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}
+                                    className={`w-[90px] whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
                                 >
                                     {car.sourceId ?? "—"}
                                 </td>
                                 <td
-                                    className={`w-[90px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}
+                                    className={`w-[90px] whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
                                 >
                                     {car.year}
                                 </td>
                                 <td
-                                    className={`w-[210px] whitespace-nowrap px-3 py-4 text-right font-mono ${mutedText}`}
+                                    className={`w-[210px] whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
                                 >
                                     {fmtKm(car.mileageKm)}
                                 </td>
                                 <td
-                                    className={`w-[170px] whitespace-nowrap px-3 py-4 text-right font-mono font-semibold ${strongText}`}
+                                    className={`w-[170px] whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
                                 >
                                     {fmtEur(car.price)}
                                 </td>
                                 <td
-                                    className={`w-[210px] whitespace-nowrap px-3 py-4 text-right font-mono font-semibold ${strongText}`}
+                                    className={`w-[210px] whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
                                 >
                                     <div className="flex flex-col items-end gap-1">
                                         <span>{fmtWon(car.priceWon)}</span>
@@ -381,16 +382,16 @@ export default function CarTable({
                                     </div>
                                 </td>
                                 <td
-                                    className={`w-[190px] whitespace-nowrap px-3 py-4 text-right font-mono font-semibold ${strongText}`}
+                                    className={`w-[190px] whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
                                 >
                                     {caromotoPrice != null
                                         ? fmtEur(caromotoPrice)
                                         : "—"}
                                 </td>
                                 <td
-                                    className={`w-[250px] whitespace-nowrap px-3 py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}
+                                    className={`w-[160px] py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}
                                 >
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-col items-start gap-1">
                                         <span>{car.modifiedDate}</span>
                                         {isInactive && (
                                             <span className="rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-amber-700">
@@ -399,7 +400,7 @@ export default function CarTable({
                                         )}
                                     </div>
                                 </td>
-                                <td className="w-[220px] px-3 py-4">
+                                <td className="w-[220px] py-4">
                                     <div
                                         className={`flex min-h-[3rem] items-center ${
                                             !car.hasInspection ? "justify-center" : ""
@@ -408,7 +409,7 @@ export default function CarTable({
                                         <DamageBadge car={car} />
                                     </div>
                                 </td>
-                                <td className="w-[168px] px-3 py-4">
+                                <td className="w-[168px] py-4">
                                     {car.origin === "kbcha" ? (
                                         <div className={CENTERED_DASH_CLASS}>—</div>
                                     ) : (
@@ -447,7 +448,7 @@ export default function CarTable({
                                         </div>
                                     )}
                                 </td>
-                                <td className="w-[90px] whitespace-nowrap px-3 py-4">
+                                <td className="w-[90px] whitespace-nowrap py-4">
                                     <FavoriteButton
                                         active={Boolean(car.isFavorite)}
                                         onToggle={() =>
@@ -458,7 +459,7 @@ export default function CarTable({
                                         }
                                     />
                                 </td>
-                                <td className="whitespace-nowrap px-3 py-4">
+                                <td className="whitespace-nowrap py-4">
                                     <OpenExternalLink
                                         href={car.url}
                                         className={TABLE_OPEN_LINK_CLASS}
@@ -471,6 +472,7 @@ export default function CarTable({
                     })}
                 </tbody>
             </table>
+            </div>
             <InspectionModal
                 car={inspectionCar}
                 onClose={() => setInspectionCar(null)}
