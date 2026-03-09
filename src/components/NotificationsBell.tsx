@@ -3,7 +3,7 @@ import { groupNotificationsByDate } from "../utils/notifications";
 import NotificationListItem from "./notifications/NotificationListItem";
 
 interface Props {
-  onNavigateToCar?: (origin: "encar" | "kbcha", sourceId: string) => void;
+  onNavigateToCar?: (origin: "encar" | "kbcha" | "kcar", sourceId: string) => void;
 }
 
 export default function NotificationsBell({ onNavigateToCar }: Props) {

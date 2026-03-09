@@ -3,7 +3,7 @@ import { useMarkNotificationsRead, useNotifications } from "./useNotifications";
 import type { NotificationItem } from "../types/notification";
 
 interface Params {
-  onNavigateToCar?: (origin: "encar" | "kbcha", sourceId: string) => void;
+  onNavigateToCar?: (origin: "encar" | "kbcha" | "kcar", sourceId: string) => void;
 }
 
 export function useNotificationsPopover({ onNavigateToCar }: Params) {

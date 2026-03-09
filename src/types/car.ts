@@ -19,7 +19,7 @@ export type InspectionConditionKey =
 
 export interface Car {
   id: number;
-  origin?: "encar" | "kbcha";
+  origin?: "encar" | "kbcha" | "kcar";
   sourceId?: string;
   isActive?: boolean;
   isNew?: boolean;

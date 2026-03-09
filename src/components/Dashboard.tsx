@@ -26,13 +26,14 @@ const DAMAGE_FILTER_OPTIONS: Array<{
 ];
 
 const ORIGIN_FILTER_OPTIONS: Array<{
-  key: "all" | "encar" | "kbcha";
+  key: "all" | "encar" | "kbcha" | "kcar";
   label: string;
   activeClass: string;
 }> = [
   { key: "all", label: "Все", activeClass: "border-blue-300 bg-blue-50 text-blue-700" },
   { key: "encar", label: "ENCAR", activeClass: "border-red-300 bg-red-50 text-red-700" },
   { key: "kbcha", label: "KBCHA", activeClass: "border-amber-300 bg-amber-50 text-amber-800" },
+  { key: "kcar", label: "KCAR", activeClass: "border-violet-300 bg-violet-50 text-violet-800" },
 ];
 
 export default function Dashboard() {
@@ -71,7 +72,7 @@ export default function Dashboard() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [damageFilter, setDamageFilter] = useState<"all" | InspectionConditionKey>("all");
-  const [originFilter, setOriginFilter] = useState<"all" | "encar" | "kbcha">("all");
+  const [originFilter, setOriginFilter] = useState<"all" | "encar" | "kbcha" | "kcar">("all");
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -202,7 +203,7 @@ export default function Dashboard() {
     setPriceRange([limits.minPriceWon, limits.maxPriceWon]);
   }
 
-  function scrollToCarElement(origin: "encar" | "kbcha", sourceId: string) {
+  function scrollToCarElement(origin: "encar" | "kbcha" | "kcar", sourceId: string) {
     const selector = `[data-car-origin="${origin}"][data-car-source-id="${sourceId}"]`;
     const matches = Array.from(document.querySelectorAll<HTMLElement>(selector));
     const target = matches.find((node) => node.offsetParent !== null) ?? matches[0] ?? null;
@@ -216,7 +217,7 @@ export default function Dashboard() {
     return true;
   }
 
-  function handleNavigateToCar(origin: "encar" | "kbcha", sourceId: string) {
+  function handleNavigateToCar(origin: "encar" | "kbcha" | "kcar", sourceId: string) {
     setActiveTab("all");
     clearAll();
 
@@ -425,5 +426,6 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 

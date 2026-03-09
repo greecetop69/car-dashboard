@@ -11,7 +11,9 @@ export interface PendingNotification {
 }
 
 function formatOriginLabel(origin: CarOrigin) {
-  return origin === "kbcha" ? "KBCHA" : "ENCAR";
+  if (origin === "kbcha") return "KBCHA";
+  if (origin === "kcar") return "KCAR";
+  return "ENCAR";
 }
 
 export function buildNewCarNotification(parsed: ParsedCarRecord): PendingNotification {

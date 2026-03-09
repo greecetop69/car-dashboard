@@ -19,7 +19,7 @@ export class Car {
   sourceId!: string;
 
   @Column({ name: "origin", type: "varchar", length: 16, default: "encar" })
-  origin!: "encar" | "kbcha";
+  origin!: "encar" | "kbcha" | "kcar";
 
   @Column({ name: "year", type: "int" })
   year!: number;

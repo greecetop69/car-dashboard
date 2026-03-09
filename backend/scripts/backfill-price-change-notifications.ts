@@ -4,7 +4,7 @@ import { Notification } from "../db/entities/Notification.js";
 
 interface HistoryRow {
   carId: number;
-  origin: "encar" | "kbcha";
+  origin: "encar" | "kbcha" | "kcar";
   sourceId: string;
   url: string;
   priceWon: number;
@@ -67,7 +67,10 @@ async function run() {
 
   const rows: HistoryRow[] = rawRows.map((row: Record<string, unknown>) => ({
     carId: Number(row.carId),
-    origin: (row.origin === "kbcha" ? "kbcha" : "encar") as "encar" | "kbcha",
+    origin:
+      row.origin === "kbcha" || row.origin === "kcar"
+        ? (row.origin as "kbcha" | "kcar")
+        : "encar",
     sourceId: String(row.sourceId ?? ""),
     url: String(row.url ?? ""),
     priceWon: Number(row.priceWon ?? 0),
@@ -97,7 +100,8 @@ async function run() {
     }
 
     const isDrop = deltaWon < 0;
-    const originLabel = row.origin === "kbcha" ? "KBCHA" : "ENCAR";
+    const originLabel =
+      row.origin === "kbcha" ? "KBCHA" : row.origin === "kcar" ? "KCAR" : "ENCAR";
     const title = isDrop ? "Снижение цены" : "Изменение цены";
     const message = `${originLabel} #${row.sourceId}: ₩ ${oldPriceWon.toLocaleString("ru-RU")} → ₩ ${newPriceWon.toLocaleString("ru-RU")}`;
 

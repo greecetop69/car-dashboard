@@ -64,6 +64,7 @@ export function useSyncCars() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.cars });
+            queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
         },
     });
 }

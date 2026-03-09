@@ -10,7 +10,7 @@ export type DamageConditionKey =
 
 export function getInspectionIdCandidates(car: Car | null): number[] {
   if (!car) return [];
-  if (car.origin === "kbcha") return [];
+  if (car.origin === "kbcha" || car.origin === "kcar") return [];
 
   const fromPhoto = car.mainPhoto?.match(/\/(\d+)_\d+\.(?:jpg|jpeg|png)/i)?.[1];
   const fromUrl = car.url?.match(/\/detail\/(\d+)/)?.[1];

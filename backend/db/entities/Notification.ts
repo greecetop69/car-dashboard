@@ -17,7 +17,7 @@ export class Notification {
   type!: NotificationType;
 
   @Column({ name: "car_origin", type: "varchar", length: 16, nullable: true })
-  carOrigin!: "encar" | "kbcha" | null;
+  carOrigin!: "encar" | "kbcha" | "kcar" | null;
 
   @Column({ name: "car_source_id", type: "varchar", length: 32, nullable: true })
   carSourceId!: string | null;

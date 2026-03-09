@@ -14,6 +14,7 @@ import {
 } from "./db.js";
 import { fetchEncarCars } from "./encarService.js";
 import { fetchKbchaCars } from "./kbchaService.js";
+import { fetchKcarCars } from "./kcarService.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import type { CarOrigin } from "./carSources.js";
 import { readJsonBody, sendJson } from "./http.js";
@@ -57,13 +58,18 @@ async function syncCars(options?: { allowDeactivate?: boolean }): Promise<SyncRe
     let syncedCars = 0;
     await withTimeout(
       (async () => {
-        const [encar, kbcha] = await Promise.all([fetchEncarCars(), fetchKbchaCars()]);
-        syncedCars = encar.cars.length + kbcha.cars.length;
+        const [encar, kbcha, kcar] = await Promise.all([
+          fetchEncarCars(),
+          fetchKbchaCars(),
+          fetchKcarCars(),
+        ]);
+        syncedCars = encar.cars.length + kbcha.cars.length + kcar.cars.length;
         const deactivateOrigins: CarOrigin[] = [];
         if (encar.cars.length > 0 && !encar.isPartial) deactivateOrigins.push("encar");
         if (kbcha.cars.length > 0 && !kbcha.isPartial) deactivateOrigins.push("kbcha");
+        if (kcar.cars.length > 0 && !kcar.isPartial) deactivateOrigins.push("kcar");
 
-        await saveParsedCars([...encar.cars, ...kbcha.cars], {
+        await saveParsedCars([...encar.cars, ...kbcha.cars, ...kcar.cars], {
           deactivateOrigins: allowDeactivate ? deactivateOrigins : [],
         });
 

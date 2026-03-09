@@ -3,7 +3,7 @@ export type NotificationType = "new_car" | "price_drop" | "price_change" | "car_
 export interface NotificationItem {
   id: number;
   type: NotificationType;
-  carOrigin: "encar" | "kbcha" | null;
+  carOrigin: "encar" | "kbcha" | "kcar" | null;
   carSourceId: string | null;
   title: string;
   message: string;

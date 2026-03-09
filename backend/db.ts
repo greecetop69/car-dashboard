@@ -243,7 +243,7 @@ export async function saveParsedCars(
   const pendingNotificationsForDelivery: PendingNotification[] = [];
   const deactivateOrigins =
     options?.deactivateOrigins?.filter((item, idx, arr) => arr.indexOf(item) === idx) ??
-    ["encar", "kbcha"];
+    ["encar", "kbcha", "kcar"];
 
   await AppDataSource.transaction(async (manager) => {
     const carRepo = manager.getRepository(Car);
@@ -568,7 +568,8 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
 
     return {
       id: row.id,
-      origin: row.origin === "kbcha" ? "kbcha" : "encar",
+      origin:
+        row.origin === "kbcha" || row.origin === "kcar" ? row.origin : "encar",
       sourceId: row.source_id,
       isActive: toBoolFlag(row.is_active),
       isNew: toBoolFlag(row.is_new),

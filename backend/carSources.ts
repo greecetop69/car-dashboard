@@ -1,4 +1,4 @@
-export type CarOrigin = "encar" | "kbcha";
+export type CarOrigin = "encar" | "kbcha" | "kcar";
 
 export interface CarPhoto {
   type: string;
@@ -61,6 +61,18 @@ export interface KbchaMapInput {
   modifiedDate: string;
 }
 
+export interface KcarMapInput {
+  sourceId: string;
+  year: number;
+  mileageKm: number;
+  priceWon: number;
+  mainPhoto: string | null;
+  photos: CarPhoto[];
+  badge: string;
+  modifiedDate: string;
+  inspectionCondition?: "clean" | "repair" | null;
+}
+
 export function mapEncar(input: EncarMapInput): ParsedCarRecord {
   return {
     origin: "encar",
@@ -109,8 +121,34 @@ export function mapKbcha(input: KbchaMapInput): ParsedCarRecord | null {
   };
 }
 
+export function mapKcar(input: KcarMapInput): ParsedCarRecord | null {
+  if (!input.sourceId) return null;
+  if (!Number.isFinite(input.priceWon) || input.priceWon <= 0) return null;
+
+  const detailUrl = `https://www.kcar.com/bc/detail/carInfoDtl?i_sCarCd=${input.sourceId}`;
+  return {
+    origin: "kcar",
+    sourceId: input.sourceId,
+    year: input.year,
+    mileageKm: input.mileageKm,
+    priceWon: input.priceWon,
+    url: detailUrl,
+    inspectionUrl: detailUrl,
+    diagnosisUrl: detailUrl,
+    accidentUrl: detailUrl,
+    hasInspection: input.inspectionCondition != null,
+    inspectionCondition: input.inspectionCondition ?? null,
+    mainPhoto: input.mainPhoto,
+    photos: input.photos,
+    badge: input.badge,
+    modifiedDate: input.modifiedDate,
+  };
+}
+
 function sourcePriority(origin: CarOrigin) {
-  return origin === "encar" ? 2 : 1;
+  if (origin === "encar") return 3;
+  if (origin === "kbcha") return 2;
+  return 1;
 }
 
 function priceBucket(priceWon: number) {
