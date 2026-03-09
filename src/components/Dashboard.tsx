@@ -40,6 +40,7 @@ export default function Dashboard() {
   const { data, isPending, isError } = useCars();
   const toggleFavoriteMutation = useToggleFavorite();
   const syncCarsMutation = useSyncCars();
+  const [errorToast, setErrorToast] = useState<string | null>(null);
 
   const cars = data?.cars ?? [];
   const activeTotal = useMemo(
@@ -76,6 +77,16 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
+  const getErrorMessage = (error: unknown) => {
+    if (typeof error === "object" && error !== null) {
+      const maybe = error as { message?: unknown };
+      if (typeof maybe.message === "string" && maybe.message.trim().length > 0) {
+        return maybe.message;
+      }
+    }
+    return "Запрос не выполнен";
+  };
+
   const conditionByCarId = useMemo(() => {
     const map = new Map<number, InspectionConditionKey>();
     if (damageFilter === "all") return map;
@@ -105,6 +116,17 @@ export default function Dashboard() {
     limits.minPriceWon,
     limits.maxPriceWon,
   ]);
+
+  useEffect(() => {
+    if (!isError) return;
+    setErrorToast("Не удалось загрузить данные с backend API");
+  }, [isError]);
+
+  useEffect(() => {
+    if (!errorToast) return;
+    const timer = window.setTimeout(() => setErrorToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [errorToast]);
 
   const readyForFilters = useMemo(() => {
     return limits.maxYear > 0 && limits.maxMileage >= 0 && limits.maxPriceWon >= 0;
@@ -251,6 +273,11 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {errorToast && (
+        <div className="fixed right-4 top-4 z-50 max-w-sm rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-lg">
+          {errorToast}
+        </div>
+      )}
       <div className="mx-auto max-w-[1680px] px-3 py-6 md:px-4 md:py-8 xl:px-5 xl:py-10">
         <div className="mb-7">
           <div className="mb-1 flex items-center justify-between gap-2.5">
@@ -353,7 +380,14 @@ export default function Dashboard() {
             <StatsBar cars={tabFilteredCars} total={activeTotal} />
             <div className="flex items-center gap-3">
               <button
-                onClick={() => syncCarsMutation.mutate()}
+                onClick={() => {
+                  setErrorToast(null);
+                  syncCarsMutation.mutate(undefined, {
+                    onError: (error) => {
+                      setErrorToast(getErrorMessage(error));
+                    },
+                  });
+                }}
                 disabled={syncCarsMutation.isPending}
                 className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -414,7 +448,12 @@ export default function Dashboard() {
             onSort={handleSort}
             onSelectRow={(id) => setSelectedId((prev) => (prev === id ? null : id))}
             onToggleFavorite={(id, isFavorite) =>
-              toggleFavoriteMutation.mutate({ id, isFavorite })
+              toggleFavoriteMutation.mutate(
+                { id, isFavorite },
+                {
+                  onError: (error) => setErrorToast(getErrorMessage(error)),
+                },
+              )
             }
           />
         </div>
@@ -426,6 +465,5 @@ export default function Dashboard() {
     </div>
   );
 }
-
 
 
