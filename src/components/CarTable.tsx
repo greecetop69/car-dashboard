@@ -225,15 +225,15 @@ export default function CarTable({
                 </div>
 
                 <div className="hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[1640px] border-collapse text-sm xl:text-base [&_th]:px-2 [&_td]:px-2 xl:[&_th]:px-3 xl:[&_td]:px-3">
+                    <table className="w-full border-collapse text-sm xl:text-base [&_th]:px-2 [&_td]:px-2 xl:[&_th]:px-3 xl:[&_td]:px-3">
                         <thead>
                             <tr className="border-b border-slate-200 bg-slate-50">
-                                <th className="w-[180px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                <th className="py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                                     Фото
                                 </th>
                                 <th
                                     onClick={() => onSort("sourceId")}
-                                    className={`w-[90px] cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                                    className={`cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                                         sortKey === "sourceId"
                                             ? "text-blue-600"
                                             : "text-slate-400 hover:text-slate-700"
@@ -253,14 +253,6 @@ export default function CarTable({
                                             sortKey === col.key
                                                 ? "text-blue-600"
                                                 : "text-slate-400 hover:text-slate-700"
-                                        } ${
-                                            col.key === "year"
-                                                ? "w-[90px]"
-                                                : col.key === "mileageKm"
-                                                  ? "w-[210px]"
-                                                  : col.key === "price"
-                                                    ? "w-[170px]"
-                                                    : "w-[210px]"
                                         }`}
                                     >
                                         {col.label}
@@ -272,7 +264,7 @@ export default function CarTable({
                                 ))}
                                 <th
                                     onClick={() => onSort("caromotoPrice")}
-                                    className={`w-[190px] cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
+                                    className={`cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
                                         sortKey === "caromotoPrice"
                                             ? "text-blue-600"
                                             : "text-slate-400 hover:text-slate-700"
@@ -284,19 +276,19 @@ export default function CarTable({
                                         dir={sortDir}
                                     />
                                 </th>
-                                <th className="w-[160px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                <th className="py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                                     Обновлено
                                 </th>
-                                <th className="w-[220px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                <th className="py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                                     Статус кузова
                                 </th>
-                                <th className="w-[168px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                <th className="py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                                     Инспекция
                                 </th>
-                                <th className="w-[90px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                <th className="py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                                     Избр.
                                 </th>
-                                <th className="w-[140px] py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                <th className="py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                                     Ссылка
                                 </th>
                             </tr>
@@ -374,27 +366,27 @@ export default function CarTable({
                                             </div>
                                         </td>
                                         <td
-                                            className={`w-[90px] whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
+                                            className={`whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
                                         >
                                             {car.sourceId ?? "—"}
                                         </td>
                                         <td
-                                            className={`w-[90px] whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
+                                            className={`whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
                                         >
                                             {car.year}
                                         </td>
                                         <td
-                                            className={`w-[210px] whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
+                                            className={`whitespace-nowrap py-4 text-right font-mono ${mutedText}`}
                                         >
                                             {fmtKm(car.mileageKm)}
                                         </td>
                                         <td
-                                            className={`w-[170px] whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
+                                            className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
                                         >
                                             {fmtEur(car.price)}
                                         </td>
                                         <td
-                                            className={`w-[210px] whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
+                                            className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
                                         >
                                             <div className="flex flex-col items-end gap-1">
                                                 <span>
@@ -404,14 +396,14 @@ export default function CarTable({
                                             </div>
                                         </td>
                                         <td
-                                            className={`w-[190px] whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
+                                            className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
                                         >
                                             {caromotoPrice != null
                                                 ? fmtEur(caromotoPrice)
                                                 : "—"}
                                         </td>
                                         <td
-                                            className={`w-[160px] py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}
+                                            className={`py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}
                                         >
                                             <div className="flex flex-col items-start gap-1">
                                                 <span>{car.modifiedDate}</span>
@@ -422,7 +414,7 @@ export default function CarTable({
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="w-[220px] py-4">
+                                        <td className="py-4">
                                             <div
                                                 className={`flex min-h-[3rem] items-center ${
                                                     !car.hasInspection
@@ -433,7 +425,7 @@ export default function CarTable({
                                                 <DamageBadge car={car} />
                                             </div>
                                         </td>
-                                        <td className="w-[168px] py-4">
+                                        <td className="py-4">
                                             {car.origin === "kbcha" ||
                                             car.origin === "kcar" ? (
                                                 <div
@@ -500,7 +492,7 @@ export default function CarTable({
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="w-[90px] whitespace-nowrap py-4">
+                                        <td className="whitespace-nowrap py-4">
                                             <FavoriteButton
                                                 active={Boolean(car.isFavorite)}
                                                 onToggle={() =>
