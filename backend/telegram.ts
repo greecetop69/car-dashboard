@@ -14,7 +14,9 @@ const TG_RETRY_COUNT = Math.max(0, Number(process.env.TG_RETRY_COUNT ?? 1));
 const TG_RETRY_DELAY_MS = Math.max(100, Number(process.env.TG_RETRY_DELAY_MS ?? 600));
 
 function formatTypeLabel(type: PendingNotification["type"]) {
-  if (type === "price_drop") return "PRICE DROP";
+  if (type === "new_car") return "NEW";
+  if (type === "price_drop") return "PRICE DOWN";
+  if (type === "price_change") return "PRICE UP";
   if (type === "car_sold") return "SOLD";
   return "EVENT";
 }
@@ -108,7 +110,12 @@ export async function sendTelegramNotifications(items: PendingNotification[]) {
     throw new Error("Invalid TG_CHAT_ID format");
   }
 
-  const notifyTypes = new Set<PendingNotification["type"]>(["price_drop", "car_sold"]);
+  const notifyTypes = new Set<PendingNotification["type"]>([
+    "new_car",
+    "price_drop",
+    "price_change",
+    "car_sold",
+  ]);
   const targets = items.filter((item) => notifyTypes.has(item.type)).slice(0, TG_MAX_MESSAGES_PER_BATCH);
   if (targets.length === 0) return;
 

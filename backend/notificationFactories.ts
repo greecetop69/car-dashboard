@@ -53,6 +53,26 @@ export function buildPriceDropNotification(
   };
 }
 
+export function buildPriceChangeNotification(
+  parsed: ParsedCarRecord,
+  previousPriceWon: number,
+): PendingNotification {
+  return {
+    type: "price_change",
+    carOrigin: parsed.origin,
+    carSourceId: parsed.sourceId,
+    title: "Изменение цены",
+    message: `${formatOriginLabel(parsed.origin)} #${parsed.sourceId}: ₩ ${previousPriceWon.toLocaleString("ru-RU")} → ₩ ${parsed.priceWon.toLocaleString("ru-RU")}`,
+    payloadJson: {
+      oldPriceWon: previousPriceWon,
+      newPriceWon: parsed.priceWon,
+      deltaWon: parsed.priceWon - previousPriceWon,
+      url: parsed.url,
+      mainPhoto: parsed.mainPhoto,
+    },
+  };
+}
+
 export function buildCarSoldNotification(input: {
   origin: CarOrigin;
   sourceId: string;

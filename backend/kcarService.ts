@@ -6,6 +6,7 @@ interface KcarRow {
   prdcnYr?: string | number;
   milg?: string | number;
   prc?: string | number;
+  dcPrc?: string | number;
   lsizeImgPath?: string;
   msizeImgPath?: string;
   ssizeImgPath?: string;
@@ -27,6 +28,7 @@ interface KcarDetailPayload {
   data?: {
     avo?: {
       salprc?: number | string;
+      wklyDcPrc?: number | string | null;
       milg?: number | string;
       regModelyr?: number | string;
       acdtHistComnt?: string | null;
@@ -45,6 +47,7 @@ const KCAR_LIST_URL = "https://api.kcar.com/bc/search/list/drct";
 const KCAR_DETAIL_URL = "https://api.kcar.com/bc/mma/info";
 const KCAR_TIMEOUT_MS = 20000;
 const KCAR_DETAIL_TIMEOUT_MS = 12000;
+const KCAR_MAX_PRICE_WON = Math.max(0, Number(process.env.KCAR_MAX_PRICE_WON ?? 13000000));
 const KCAR_DETAIL_ENABLED = !["0", "false", "no"].includes(
   (process.env.KCAR_DETAIL_ENABLED ?? "true").toLowerCase(),
 );
@@ -58,7 +61,7 @@ const KCAR_HEADERS = {
 };
 
 const DEFAULT_KCAR_ENC =
-  "gEa/4VFh8fIVdgV57tSPeo5wnLj8tR9ZXOBi0F2lGHmF+ixSw7TWnjEHz0DkNHnT1bcDauIelKkX9mmN8NFcznKoVRxlbMUe1uUDLmIyeKAd/L8CsCfV+e2cER2JXsvWqnLlzZ+X0waWoKV3sUX+VlZ2tomRsG42B0C+xgm50I5El87tlE5WdkGSailmUjpZWvfIYUYIWG+4JKawbgtydRSFWmU4aMcjhgMIE/E6QOf00EBr9dqF13jyLlloUgIjOW8XhF8ZXV3V2dOobyz3kvrzEdh+SMmh0CIhEzHPaWQ/yjegHZ8pQGWSWqomEM2HSn72wnPYozQouxnhm3io9zZUk9z6BqI3Q5p5gZteihW4AJxGkcKqcFzePNjmgDH6";
+  "gEa/4VFh8fIVdgV57tSPeo5wnLj8tR9ZXOBi0F2lGHmF+ixSw7TWnjEHz0DkNHnT1bcDauIelKkX9mmN8NFcznKoVRxlbMUe1uUDLmIyeKAd/L8CsCfV+e2cER2JXsvWqnLlzZ+X0waWoKV3sUX+VlZ2tomRsG42B0C+xgm50I5El87tlE5WdkGSailmUjpZWvfIYUYIWG+4JKawbgtydSlItw/6DTEEdwbs/OmrTlQO/ogfQkOMLejEerZEiGgx+75+e2Mi9hr2V9mL9s0Kfnxgo1TJofjT/DYqSYl1V1sBlTVcsimPoIMVryl0KWRwIkXXImJaRoxhmJUvu/+mPIwdfRmFr/FRzfNItuq2MXWB9s8YzXtYen+MkFMS5sZbA69XULzPbBEjIr6FXMIUPg==";
 
 function parseNumeric(value: unknown) {
   if (typeof value === "number") return value;
@@ -120,6 +123,7 @@ const detailCache = new Map<
   string,
   {
     priceWon?: number;
+    discountPriceWon?: number;
     mileageKm?: number;
     year?: number;
     inspectionCondition?: "clean" | "repair" | null;
@@ -160,6 +164,7 @@ async function fetchKcarDetail(sourceId: string) {
   const owncarDmgeAcdtCnt = Math.max(0, Math.trunc(parseNumeric(avo.owncarDmgeAcdtCnt)));
   const detail = {
     priceWon: Math.max(0, Math.trunc(parseNumeric(avo.salprc))),
+    discountPriceWon: Math.max(0, Math.trunc(parseNumeric(avo.wklyDcPrc) * 10000)),
     mileageKm: Math.max(0, Math.trunc(parseNumeric(avo.milg))),
     year: parseYear(avo.regModelyr),
     inspectionCondition: normalizeDetailInspectionCondition(
@@ -180,12 +185,18 @@ async function normalizeRow(row: KcarRow): Promise<ParsedCarRecord | null> {
 
   const listYear = parseYear(row.prdcnYr);
   const listMileageKm = Math.max(0, Math.trunc(parseNumeric(row.milg)));
-  const listPriceManWon = parseNumeric(row.prc);
-  const listPriceWon = Math.max(0, Math.trunc(listPriceManWon * 10000));
+  const listBasePriceManWon = parseNumeric(row.prc);
+  const listDiscountPriceManWon = parseNumeric(row.dcPrc);
+  const listBasePriceWon = Math.max(0, Math.trunc(listBasePriceManWon * 10000));
+  const listDiscountPriceWon = Math.max(0, Math.trunc(listDiscountPriceManWon * 10000));
+  const listPriceWon =
+    listDiscountPriceWon > 0 && listDiscountPriceWon < listBasePriceWon
+      ? listDiscountPriceWon
+      : listBasePriceWon;
   let year = listYear;
   let mileageKm = listMileageKm;
   let priceWon = listPriceWon;
-  if (priceWon <= 0) return null;
+  if (priceWon <= 0 || (KCAR_MAX_PRICE_WON > 0 && priceWon > KCAR_MAX_PRICE_WON)) return null;
 
   let badge = buildBadge([row.modelNm, row.grdNm, row.grdDtlNm]);
   let mainPhoto = row.lsizeImgPath || row.msizeImgPath || row.ssizeImgPath || null;
@@ -199,8 +210,22 @@ async function normalizeRow(row: KcarRow): Promise<ParsedCarRecord | null> {
       const detail = await fetchKcarDetail(sourceId);
       if (detail) {
         const detailPriceWon = detail.priceWon;
-        if (typeof detailPriceWon === "number" && Number.isFinite(detailPriceWon) && detailPriceWon > 0) {
-          priceWon = detailPriceWon;
+        const detailDiscountPriceWon = detail.discountPriceWon;
+        const effectiveDetailPriceWon =
+          typeof detailDiscountPriceWon === "number" &&
+          Number.isFinite(detailDiscountPriceWon) &&
+          detailDiscountPriceWon > 0 &&
+          typeof detailPriceWon === "number" &&
+          Number.isFinite(detailPriceWon) &&
+          detailDiscountPriceWon < detailPriceWon
+            ? detailDiscountPriceWon
+            : detailPriceWon;
+        if (
+          typeof effectiveDetailPriceWon === "number" &&
+          Number.isFinite(effectiveDetailPriceWon) &&
+          effectiveDetailPriceWon > 0
+        ) {
+          priceWon = effectiveDetailPriceWon;
         }
         const detailMileageKm = detail.mileageKm;
         if (typeof detailMileageKm === "number" && Number.isFinite(detailMileageKm) && detailMileageKm > 0) {
@@ -223,6 +248,10 @@ async function normalizeRow(row: KcarRow): Promise<ParsedCarRecord | null> {
     } catch {
       // keep list data when detail endpoint is temporarily unavailable
     }
+  }
+
+  if (KCAR_MAX_PRICE_WON > 0 && priceWon > KCAR_MAX_PRICE_WON) {
+    return null;
   }
 
   return mapKcar({

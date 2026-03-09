@@ -8,6 +8,7 @@ import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import {
   buildCarSoldNotification,
   buildNewCarNotification,
+  buildPriceChangeNotification,
   buildPriceDropNotification,
   type PendingNotification,
 } from "./notificationFactories.js";
@@ -308,11 +309,20 @@ export async function saveParsedCars(
 
         if (
           existed &&
+          parsed.origin !== "kcar" &&
           previousPriceWon != null &&
           Number.isFinite(previousPriceWon) &&
           parsed.priceWon < previousPriceWon
         ) {
           notificationsToInsert.push(buildPriceDropNotification(parsed, previousPriceWon));
+        } else if (
+          existed &&
+          parsed.origin !== "kcar" &&
+          previousPriceWon != null &&
+          Number.isFinite(previousPriceWon) &&
+          parsed.priceWon > previousPriceWon
+        ) {
+          notificationsToInsert.push(buildPriceChangeNotification(parsed, previousPriceWon));
         }
       }
 
@@ -552,7 +562,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
 
   const cars: CarRow[] = rows.map((row) => {
     const priceHistory = historyByCarId.get(row.id) ?? [];
-    const previousPriceWon = priceHistory[1]?.priceWon ?? null;
+    const previousPriceWon = row.origin === "kcar" ? null : (priceHistory[1]?.priceWon ?? null);
     const currentPriceWon = Number(row.price_won);
     const priceDeltaWon =
       previousPriceWon == null ? 0 : currentPriceWon - previousPriceWon;
