@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCars, useSyncCars, useToggleFavorite } from "../hooks/useCars";
 import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
+import { formatDateTimeChisinau } from "../utils/dateTime";
 import { fmtKm, fmtWon } from "../utils/format";
 import CarTable from "./CarTable";
 import NotificationsBell from "./NotificationsBell";
@@ -79,19 +80,7 @@ export default function Dashboard() {
   const formattedUpdatedAt = useMemo(() => {
     const updatedAt = data?.updatedAt;
     if (!updatedAt) return null;
-
-    const parsed = new Date(updatedAt);
-    if (Number.isNaN(parsed.getTime())) return null;
-
-    return new Intl.DateTimeFormat("ru-RU", {
-      timeZone: "Europe/Chisinau",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(parsed);
+    return formatDateTimeChisinau(updatedAt);
   }, [data?.updatedAt]);
 
   const getErrorMessage = (error: unknown) => {

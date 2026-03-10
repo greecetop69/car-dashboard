@@ -1,4 +1,5 @@
 import type { Car } from "../../types/car";
+import { formatDateTimeChisinau } from "../../utils/dateTime";
 import { fmtWon } from "../../utils/format";
 
 interface Props {
@@ -53,7 +54,7 @@ export default function PriceHistoryModal({ car, onClose }: Props) {
               className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2"
             >
               <span className="text-xs text-slate-500">
-                {new Date(item.recordedAt).toLocaleString("ru-RU")}
+                {formatDateTimeChisinau(item.recordedAt)}
               </span>
               <span className="font-semibold text-slate-800">{fmtWon(item.priceWon)}</span>
             </div>
@@ -74,7 +75,7 @@ export default function PriceHistoryModal({ car, onClose }: Props) {
                     className="flex items-center justify-between text-sm"
                   >
                     <span className="text-slate-500">
-                      {new Date(item.recordedAt).toLocaleString("ru-RU")}
+                      {formatDateTimeChisinau(item.recordedAt)}
                     </span>
                     <span
                       className={

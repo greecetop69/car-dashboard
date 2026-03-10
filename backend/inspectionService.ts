@@ -1,6 +1,7 @@
 import { AppDataSource } from "./db/data-source.js";
 import { Car } from "./db/entities/Car.js";
 import { fetchWithTimeout } from "./http.js";
+import { In } from "typeorm";
 
 interface InspectionType {
   code?: string | null;
@@ -79,6 +80,16 @@ const INSPECTION_TIMEOUT_MS = 12000;
 
 function buildInspectionCacheKey(car: Car) {
   return `${car.sourceId}|${car.priceWon}|${car.modifiedDate}|${car.hasInspection ? 1 : 0}`;
+}
+
+function getInspectionIdCandidates(car: Pick<Car, "sourceId" | "url" | "mainPhoto">): number[] {
+  const fromPhoto = car.mainPhoto?.match(/\/(\d+)_\d+\.(?:jpg|jpeg|png)/i)?.[1] ?? null;
+  const fromUrl = car.url?.match(/\/detail\/(\d+)/i)?.[1] ?? null;
+  const fromSource = car.sourceId ?? null;
+
+  return [fromPhoto, fromUrl, fromSource]
+    .map((value) => Number(value))
+    .filter((id, idx, arr) => Number.isInteger(id) && id > 0 && arr.indexOf(id) === idx);
 }
 
 function parsePersistedSummary(raw: unknown): InspectionSummary | null {
@@ -266,6 +277,52 @@ export async function getInspectionSummaryWithCarCache(
   car.inspectionCondition = getConditionKey(fresh);
   await AppDataSource.getRepository(Car).save(car);
   return fresh;
+}
+
+export async function warmEncarInspectionCacheForCarIds(
+  carIds: number[],
+  concurrency = 3,
+): Promise<void> {
+  const uniqueIds = [...new Set(carIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (uniqueIds.length === 0) return;
+
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+
+  const cars = await AppDataSource.getRepository(Car).find({
+    where: { id: In(uniqueIds) },
+  });
+  const queue = cars.filter((car) => {
+    if (car.origin !== "encar") return false;
+    if (!car.hasInspection) return false;
+
+    const persisted = parsePersistedSummary(car.inspectionSummaryJson);
+    const expectedCacheKey = buildInspectionCacheKey(car);
+    if (!persisted) return true;
+    if (car.inspectionCacheKey !== expectedCacheKey) return true;
+    return !car.inspectionCondition;
+  });
+  if (queue.length === 0) return;
+
+  const workerCount = Math.max(1, Math.min(concurrency, queue.length));
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (queue.length > 0) {
+        const car = queue.shift();
+        if (!car) break;
+
+        const [primaryVehicleId, ...fallbackIds] = getInspectionIdCandidates(car);
+        if (!Number.isInteger(primaryVehicleId) || primaryVehicleId <= 0) continue;
+
+        try {
+          await getInspectionSummaryWithCarCache(primaryVehicleId, fallbackIds, car.id);
+        } catch {
+          // Keep sync resilient: enrichment is best-effort.
+        }
+      }
+    }),
+  );
 }
 
 function getConditionFromOpenRecord(payload: OpenRecordPayload): InspectionConditionKey | null {

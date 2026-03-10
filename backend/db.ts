@@ -4,7 +4,10 @@ import { CarPriceHistory } from "./db/entities/CarPriceHistory.js";
 import { Notification, type NotificationType } from "./db/entities/Notification.js";
 import type { CarOrigin, ParsedCarRecord } from "./carSources.js";
 import { getWonToEurRate } from "./fx.js";
-import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
+import {
+  getInspectionSummaryWithCarCache,
+  warmEncarInspectionCacheForCarIds,
+} from "./inspectionService.js";
 import {
   buildCarSoldNotification,
   buildNewCarNotification,
@@ -167,6 +170,10 @@ function dedupeParsedCarsByOriginSource(parsedCars: ParsedCarRecord[]) {
   return [...map.values()];
 }
 
+function buildParsedCarKey(origin: CarOrigin, sourceId: string) {
+  return `${origin}:${sourceId}`;
+}
+
 function deliverTelegramAsync(items: PendingNotification[]) {
   if (items.length === 0) return;
   void sendTelegramNotifications(items).catch((error) => {
@@ -241,6 +248,7 @@ export async function saveParsedCars(
   const deactivateBefore = new Date(syncSeenAt.getTime() - DEACTIVATION_GRACE_HOURS * 60 * 60 * 1000);
   const uniqueParsedCars = dedupeParsedCarsByOriginSource(parsedCars);
   const pendingNotificationsForDelivery: PendingNotification[] = [];
+  const savedCarIdsForInspectionWarmup: number[] = [];
   const deactivateOrigins =
     options?.deactivateOrigins?.filter((item, idx, arr) => arr.indexOf(item) === idx) ??
     ["encar", "kbcha", "kcar"];
@@ -249,14 +257,22 @@ export async function saveParsedCars(
     const carRepo = manager.getRepository(Car);
     const historyRepo = manager.getRepository(CarPriceHistory);
     const notificationRepo = manager.getRepository(Notification);
-    const seenKeys: string[] = [];
+    const seenKeys = uniqueParsedCars.map((item) => buildParsedCarKey(item.origin, item.sourceId));
     const notificationsToInsert: PendingNotification[] = [];
+    const existingCars = seenKeys.length
+      ? await carRepo
+          .createQueryBuilder("c")
+          .where("CONCAT(c.origin, ':', c.source_id) IN (:...seenKeys)", { seenKeys })
+          .getMany()
+      : [];
+    const existingCarsByKey = new Map(
+      existingCars.map((item) => [buildParsedCarKey(item.origin, item.sourceId), item]),
+    );
+    const carsToSave: Car[] = [];
 
     for (const parsed of uniqueParsedCars) {
-      seenKeys.push(`${parsed.origin}:${parsed.sourceId}`);
-      let car = await carRepo.findOne({
-        where: { origin: parsed.origin, sourceId: parsed.sourceId },
-      });
+      const parsedKey = buildParsedCarKey(parsed.origin, parsed.sourceId);
+      let car = existingCarsByKey.get(parsedKey) ?? null;
       const existed = Boolean(car);
       const previousPriceWon = car ? Number(car.priceWon) : null;
 
@@ -308,7 +324,6 @@ export async function saveParsedCars(
 
         if (
           existed &&
-          parsed.origin !== "kcar" &&
           previousPriceWon != null &&
           Number.isFinite(previousPriceWon) &&
           parsed.priceWon < previousPriceWon
@@ -316,7 +331,6 @@ export async function saveParsedCars(
           notificationsToInsert.push(buildPriceDropNotification(parsed, previousPriceWon));
         } else if (
           existed &&
-          parsed.origin !== "kcar" &&
           previousPriceWon != null &&
           Number.isFinite(previousPriceWon) &&
           parsed.priceWon > previousPriceWon
@@ -324,21 +338,46 @@ export async function saveParsedCars(
           notificationsToInsert.push(buildPriceChangeNotification(parsed, previousPriceWon));
         }
       }
+      carsToSave.push(car);
+    }
 
-      car = await carRepo.save(car);
-
-      const lastHistory = await historyRepo.findOne({
-        where: { carId: car.id },
-        order: { recordedAt: "DESC" },
-      });
-
-      if (!lastHistory || Number(lastHistory.priceWon) !== parsed.priceWon) {
-        const history = historyRepo.create({
-          carId: car.id,
-          priceWon: String(parsed.priceWon),
-        });
-        await historyRepo.save(history);
+    const savedCars = carsToSave.length ? await carRepo.save(carsToSave) : [];
+    const parsedByKey = new Map(
+      uniqueParsedCars.map((item) => [buildParsedCarKey(item.origin, item.sourceId), item]),
+    );
+    const savedCarIds = savedCars.map((item) => item.id);
+    const latestHistoryRows = savedCarIds.length
+      ? await historyRepo.find({
+          where: { carId: In(savedCarIds) },
+          order: { carId: "ASC", recordedAt: "DESC", id: "DESC" },
+        })
+      : [];
+    const lastHistoryByCarId = new Map<number, CarPriceHistory>();
+    for (const row of latestHistoryRows) {
+      if (!lastHistoryByCarId.has(row.carId)) {
+        lastHistoryByCarId.set(row.carId, row);
       }
+    }
+
+    const historiesToInsert: CarPriceHistory[] = [];
+    for (const car of savedCars) {
+      savedCarIdsForInspectionWarmup.push(car.id);
+      const parsed = parsedByKey.get(buildParsedCarKey(car.origin, car.sourceId));
+      if (!parsed) continue;
+
+      const lastHistory = lastHistoryByCarId.get(car.id);
+      if (!lastHistory || Number(lastHistory.priceWon) !== parsed.priceWon) {
+        historiesToInsert.push(
+          historyRepo.create({
+            carId: car.id,
+            priceWon: String(parsed.priceWon),
+          }),
+        );
+      }
+    }
+
+    if (historiesToInsert.length > 0) {
+      await historyRepo.save(historiesToInsert);
     }
 
     if (seenKeys.length > 0 && deactivateOrigins.length > 0) {
@@ -426,6 +465,7 @@ export async function saveParsedCars(
     }
   });
 
+  await warmEncarInspectionCacheForCarIds(savedCarIdsForInspectionWarmup);
   deliverTelegramAsync(pendingNotificationsForDelivery);
 }
 
@@ -561,7 +601,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
 
   const cars: CarRow[] = rows.map((row) => {
     const priceHistory = historyByCarId.get(row.id) ?? [];
-    const previousPriceWon = row.origin === "kcar" ? null : (priceHistory[1]?.priceWon ?? null);
+    const previousPriceWon = priceHistory[1]?.priceWon ?? null;
     const currentPriceWon = Number(row.price_won);
     const priceDeltaWon =
       previousPriceWon == null ? 0 : currentPriceWon - previousPriceWon;
@@ -662,6 +702,7 @@ export async function deleteCarsAbovePrice(maxPriceWon: number) {
     .delete()
     .from(Car)
     .where("price_won > :maxPriceWon", { maxPriceWon: Math.floor(maxPriceWon) })
+    .andWhere("is_active = :isActive", { isActive: true })
     .execute();
 
   return result.affected ?? 0;

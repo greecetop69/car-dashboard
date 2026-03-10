@@ -1,4 +1,5 @@
 import type { Car } from "../../types/car";
+import { formatDateTimeChisinau } from "../../utils/dateTime";
 import { fmtWon } from "../../utils/format";
 
 export default function PriceTrendWon({ car }: { car: Car }) {
@@ -53,7 +54,7 @@ export default function PriceTrendWon({ car }: { car: Car }) {
                 key={`${item.recordedAt}-${idx}`}
                 className="flex items-center justify-between text-sm"
               >
-                <span className="text-slate-500">{new Date(item.recordedAt).toLocaleString("ru-RU")}</span>
+                <span className="text-slate-500">{formatDateTimeChisinau(item.recordedAt)}</span>
                 <span className={up ? "font-semibold text-red-600" : "font-semibold text-emerald-600"}>
                   {up ? "+" : "-"}
                   {fmtWon(Math.abs(item.diff))}

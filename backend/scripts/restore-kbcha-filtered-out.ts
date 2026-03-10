@@ -7,7 +7,7 @@ async function run() {
     minYear: 2017,
     maxYear: 2020,
     maxMileageKm: 130000,
-    maxPriceWon: 14000000,
+    maxPriceWon: 14500000,
   });
   console.log(`Restored KBCHA cars outside filter: ${restored}`);
 }

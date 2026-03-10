@@ -1,9 +1,8 @@
 import type { NotificationItem } from "../types/notification";
+import { formatDateTimeChisinau, formatDayKeyChisinau } from "./dateTime";
 
 export function formatNotificationDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("ru-RU");
+  return formatDateTimeChisinau(value);
 }
 
 export function isNotificationNavigable(item: NotificationItem) {
@@ -26,14 +25,13 @@ export interface NotificationDateGroup {
 export function groupNotificationsByDate(items: NotificationItem[]): NotificationDateGroup[] {
   const groups = new Map<string, NotificationItem[]>();
   const now = new Date();
-  const todayKey = toDayKey(now);
+  const todayKey = formatDayKeyChisinau(now);
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  const yesterdayKey = toDayKey(yesterday);
+  const yesterdayKey = formatDayKeyChisinau(yesterday);
 
   for (const item of items) {
-    const date = new Date(item.createdAt);
-    const key = Number.isNaN(date.getTime()) ? "unknown" : toDayKey(date);
+    const key = formatDayKeyChisinau(item.createdAt);
     const bucket = groups.get(key) ?? [];
     bucket.push(item);
     groups.set(key, bucket);
@@ -53,11 +51,4 @@ export function groupNotificationsByDate(items: NotificationItem[]): Notificatio
       }
       return { key, label, items: groupItems };
     });
-}
-
-function toDayKey(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
