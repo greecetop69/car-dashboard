@@ -5,13 +5,10 @@ const TG_ENABLED = ["1", "true", "yes"].includes(
 );
 const TG_BOT_TOKEN = (process.env.TG_BOT_TOKEN ?? "").trim();
 const TG_CHAT_ID = (process.env.TG_CHAT_ID ?? "").trim();
-const TG_TIMEOUT_MS = Math.max(1000, Number(process.env.TG_TIMEOUT_MS ?? 8000));
-const TG_MAX_MESSAGES_PER_BATCH = Math.max(
-  1,
-  Number(process.env.TG_MAX_MESSAGES_PER_BATCH ?? 25),
-);
-const TG_RETRY_COUNT = Math.max(0, Number(process.env.TG_RETRY_COUNT ?? 1));
-const TG_RETRY_DELAY_MS = Math.max(100, Number(process.env.TG_RETRY_DELAY_MS ?? 600));
+const TG_TIMEOUT_MS = 8000;
+const TG_MAX_MESSAGES_PER_BATCH = 25;
+const TG_RETRY_COUNT = 1;
+const TG_RETRY_DELAY_MS = 600;
 
 function formatTypeLabel(type: PendingNotification["type"]) {
   if (type === "new_car") return "NEW";

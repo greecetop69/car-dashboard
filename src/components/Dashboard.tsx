@@ -76,6 +76,23 @@ export default function Dashboard() {
   const [originFilter, setOriginFilter] = useState<"all" | "encar" | "kbcha" | "kcar">("all");
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const formattedUpdatedAt = useMemo(() => {
+    const updatedAt = data?.updatedAt;
+    if (!updatedAt) return null;
+
+    const parsed = new Date(updatedAt);
+    if (Number.isNaN(parsed.getTime())) return null;
+
+    return new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Europe/Chisinau",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(parsed);
+  }, [data?.updatedAt]);
 
   const getErrorMessage = (error: unknown) => {
     if (typeof error === "object" && error !== null) {
@@ -379,6 +396,11 @@ export default function Dashboard() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <StatsBar cars={tabFilteredCars} total={activeTotal} />
             <div className="flex items-center gap-3">
+              {formattedUpdatedAt && (
+                <span className="text-xs font-light text-slate-400">
+                  Последнее обновление: {formattedUpdatedAt}
+                </span>
+              )}
               <button
                 onClick={() => {
                   setErrorToast(null);
@@ -389,8 +411,14 @@ export default function Dashboard() {
                   });
                 }}
                 disabled={syncCarsMutation.isPending}
-                className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={syncCarsMutation.isPending ? "Обновление данных" : "Обновить"}
+                className={`relative flex min-w-[104px] items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+                  syncCarsMutation.isPending ? "text-transparent" : ""
+                }`}
               >
+                {syncCarsMutation.isPending && (
+                  <span className="absolute h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-700" />
+                )}
                 {syncCarsMutation.isPending ? "Обновление..." : "Обновить"}
               </button>
               {hasFilters && (
@@ -465,5 +493,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-

@@ -13,6 +13,7 @@ export interface CarsApiResponse {
         minPrice: number;
         maxPrice: number;
     };
+    updatedAt: string;
 }
 
 interface SyncCarsResponse {

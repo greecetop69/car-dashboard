@@ -6,6 +6,7 @@ import {
   getCarsFromDb,
   getNotificationsFromDb,
   markNotificationsRead,
+  pruneOldNotifications,
   reactivateFilteredOutKbchaCars,
   reactivateRecentlySeenInactiveCars,
   runMigrations,
@@ -23,13 +24,8 @@ const PORT = Number(process.env.PORT || 3001);
 const SYNC_TIMEOUT_MS = 180000;
 const MAX_ALLOWED_PRICE_WON = 14500000;
 const STALE_SYNC_THRESHOLD_MS = 6 * 60 * 60 * 1000;
-const STARTUP_REACTIVATE_HOURS = Math.max(
-  1,
-  Number(process.env.STARTUP_REACTIVATE_HOURS ?? 72),
-);
-const AUTO_SYNC_ON_STARTUP = !["0", "false", "no"].includes(
-  (process.env.AUTO_SYNC_ON_STARTUP ?? "true").toLowerCase(),
-);
+const STARTUP_REACTIVATE_HOURS = 72;
+const AUTO_SYNC_ON_STARTUP = true;
 
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
@@ -135,25 +131,38 @@ function getKishinevNowParts() {
   };
 }
 
-function startDailySyncScheduler() {
-  let lastRunDate = "";
+async function pruneNotificationsWithLog() {
+  try {
+    const deleted = await pruneOldNotifications();
+    if (deleted > 0) {
+      console.log(`[notifications] Pruned ${deleted} records older than 3 days`);
+    }
+  } catch (error) {
+    console.error("[notifications] Failed to prune old notifications:", error);
+  }
+}
+
+function startHourlySyncScheduler() {
+  let lastRunHourKey = "";
 
   const tick = async () => {
     const now = getKishinevNowParts();
-    const dateKey = `${now.year}-${now.month}-${now.day}`;
-    const shouldRun = now.hour === "07" && now.minute === "30";
+    const hourKey = `${now.year}-${now.month}-${now.day} ${now.hour}`;
+    const shouldRun = now.minute === "00";
 
-    if (!shouldRun || lastRunDate === dateKey) return;
+    if (!shouldRun || lastRunHourKey === hourKey) return;
 
-    lastRunDate = dateKey;
+    lastRunHourKey = hourKey;
     try {
       await syncCars();
-      console.log(`[sync] Daily sync completed at 07:30 Europe/Chisinau (${dateKey})`);
+      await pruneNotificationsWithLog();
+      console.log(`[sync] Hourly sync completed for Europe/Chisinau hour ${hourKey}:00`);
     } catch (error) {
-      console.error("[sync] Daily sync failed:", error);
+      console.error("[sync] Hourly sync failed:", error);
     }
   };
 
+  void pruneNotificationsWithLog();
   void tick();
   syncTimer = setInterval(() => {
     void tick();
@@ -205,6 +214,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (req.method === "POST" && url.pathname === "/api/sync") {
     try {
       const result = await syncCars();
+      await pruneNotificationsWithLog();
       sendJson(res, 200, {
         status: "ok",
         syncedCars: result.syncedCars,
@@ -332,7 +342,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 });
 
 await runMigrations();
-startDailySyncScheduler();
+startHourlySyncScheduler();
 void (async () => {
   try {
     const reactivated = await reactivateRecentlySeenInactiveCars(STARTUP_REACTIVATE_HOURS);
@@ -347,6 +357,7 @@ void (async () => {
 
   try {
     await syncCars({ allowDeactivate: false });
+    await pruneNotificationsWithLog();
   } catch (error) {
     console.error("[sync] Startup sync failed:", error);
   }

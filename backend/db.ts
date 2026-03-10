@@ -15,10 +15,9 @@ import {
 import { sendTelegramNotifications } from "./telegram.js";
 import { In } from "typeorm";
 
-const ENABLE_INSPECTION_BACKFILL_ON_READ = ["1", "true", "yes"].includes(
-  (process.env.ENABLE_INSPECTION_BACKFILL_ON_READ ?? "").toLowerCase(),
-);
-const DEACTIVATION_GRACE_HOURS = Math.max(1, Number(process.env.DEACTIVATION_GRACE_HOURS ?? 18));
+const ENABLE_INSPECTION_BACKFILL_ON_READ = false;
+const DEACTIVATION_GRACE_HOURS = 18;
+const NOTIFICATION_RETENTION_DAYS = 3;
 
 export interface PriceHistoryRow {
   priceWon: number;
@@ -608,7 +607,7 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
 
   const maxUpdated = await carRepo
     .createQueryBuilder("c")
-    .select("MAX(c.updated_at)", "updatedAt")
+    .select("MAX(c.last_seen_at)", "updatedAt")
     .getRawOne<{ updatedAt: Date | null }>();
 
   return {
@@ -870,6 +869,20 @@ export async function markNotificationsRead(ids: number[]): Promise<number> {
     .set({ isRead: true, readAt: new Date() })
     .where("id IN (:...ids)", { ids: uniqueIds })
     .andWhere("is_read = :isRead", { isRead: false })
+    .execute();
+
+  return result.affected ?? 0;
+}
+
+export async function pruneOldNotifications(days = NOTIFICATION_RETENTION_DAYS): Promise<number> {
+  await initializeDatabase();
+  const safeDays = Math.max(1, Math.floor(days));
+  const threshold = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000);
+
+  const result = await AppDataSource.createQueryBuilder()
+    .delete()
+    .from(Notification)
+    .where("created_at < :threshold", { threshold })
     .execute();
 
   return result.affected ?? 0;

@@ -47,10 +47,8 @@ const KCAR_LIST_URL = "https://api.kcar.com/bc/search/list/drct";
 const KCAR_DETAIL_URL = "https://api.kcar.com/bc/mma/info";
 const KCAR_TIMEOUT_MS = 20000;
 const KCAR_DETAIL_TIMEOUT_MS = 12000;
-const KCAR_MAX_PRICE_WON = Math.max(0, Number(process.env.KCAR_MAX_PRICE_WON ?? 13000000));
-const KCAR_DETAIL_ENABLED = !["0", "false", "no"].includes(
-  (process.env.KCAR_DETAIL_ENABLED ?? "true").toLowerCase(),
-);
+const KCAR_MAX_PRICE_WON = 13000000;
+const KCAR_DETAIL_ENABLED = true;
 const KCAR_HEADERS = {
   Accept: "application/json",
   "Content-Type": "application/json;charset=UTF-8",
