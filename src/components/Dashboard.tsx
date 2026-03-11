@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthSession, useGoogleLogin, useLogout } from "../hooks/useAuth";
+import { appConfig } from "../config/app";
 import {
   ADMIN_HINT_TEXT,
   DAMAGE_FILTER_OPTIONS,
@@ -18,7 +19,7 @@ import RangeFilter from "./RangeFilter";
 import StatsBar from "./StatsBar";
 
 export default function Dashboard() {
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+  const googleClientId = appConfig.googleClientId;
   const { data: authSession } = useAuthSession();
   const googleLoginMutation = useGoogleLogin();
   const logoutMutation = useLogout();
