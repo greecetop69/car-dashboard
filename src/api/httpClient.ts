@@ -6,4 +6,5 @@ const baseURL = import.meta.env.DEV ? "/api" : apiUrl ? `${apiUrl}/api` : "/api"
 export const api = axios.create({
   baseURL,
   timeout: 30000,
+  withCredentials: true,
 });

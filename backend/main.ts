@@ -1,6 +1,22 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
+  clearSessionCookie,
+  createSessionCookie,
+  getAuthSession,
+  getMissingAuthConfig,
+  isAuthConfigured,
+  verifyGoogleCredential,
+} from "./auth.js";
+import {
+  AUTO_SYNC_ON_STARTUP,
+  MAX_ALLOWED_PRICE_WON,
+  PORT,
+  STALE_SYNC_THRESHOLD_MS,
+  STARTUP_REACTIVATE_HOURS,
+  SYNC_TIMEOUT_MS,
+} from "./config.js";
+import {
   deactivateMissingPartialOriginCars,
   deleteCarsAbovePrice,
   getCarsFromDb,
@@ -20,15 +36,30 @@ import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import type { CarOrigin } from "./carSources.js";
 import { readJsonBody, sendJson } from "./http.js";
 
-const PORT = Number(process.env.PORT || 3001);
-const SYNC_TIMEOUT_MS = 180000;
-const MAX_ALLOWED_PRICE_WON = 14500000;
-const STALE_SYNC_THRESHOLD_MS = 6 * 60 * 60 * 1000;
-const STARTUP_REACTIVATE_HOURS = 72;
-const AUTO_SYNC_ON_STARTUP = true;
-
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
+
+function getCorsHeaders(req: IncomingMessage): Record<string, string> {
+  const origin = req.headers.origin;
+  if (!origin) {
+    return {
+      "Access-Control-Allow-Origin": "*",
+    };
+  }
+
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
+
+function hasAdminAccess(session: ReturnType<typeof getAuthSession>) {
+  return session?.isAdmin === true;
+}
+
+function sendAdminRequired(send: (statusCode: number, payload: unknown) => void) {
+  send(403, { error: "Admin access required" });
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
   let timeout: NodeJS.Timeout | null = null;
@@ -170,7 +201,7 @@ function startHourlySyncScheduler() {
   syncTimer.unref();
 }
 
-async function handleCarsRequest(forceRefresh: boolean) {
+async function handleCarsRequest(forceRefresh: boolean, canSync: boolean) {
   if (syncInFlight) {
     await syncInFlight;
   }
@@ -180,12 +211,12 @@ async function handleCarsRequest(forceRefresh: boolean) {
   const isStale =
     Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs > STALE_SYNC_THRESHOLD_MS;
 
-  if (forceRefresh || current.cars.length === 0) {
+  if ((forceRefresh || current.cars.length === 0) && canSync) {
     await syncCars({ allowDeactivate: false });
     return getCarsFromDb();
   }
 
-  if (isStale) {
+  if (isStale && canSync) {
     await syncCars({ allowDeactivate: false });
     return getCarsFromDb();
   }
@@ -194,34 +225,94 @@ async function handleCarsRequest(forceRefresh: boolean) {
 }
 
 const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const send = (
+    statusCode: number,
+    payload: unknown,
+    headers?: Record<string, string | string[]>,
+  ) => sendJson(res, statusCode, payload, { ...getCorsHeaders(req), ...headers });
+  const authSession = getAuthSession(req);
+
   if (!req.url) {
-    sendJson(res, 400, { error: "Bad Request" });
+    send(400, { error: "Bad Request" });
     return;
   }
 
   if (req.method === "OPTIONS") {
-    sendJson(res, 204, {});
+    send(204, {});
     return;
   }
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
   if (req.method === "GET" && url.pathname === "/api/health") {
-    sendJson(res, 200, { status: "ok", uptimeSec: Math.round(process.uptime()) });
+    send(200, {
+      status: "ok",
+      uptimeSec: Math.round(process.uptime()),
+      authConfigured: isAuthConfigured(),
+    });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/auth/session") {
+    send(200, {
+      authenticated: Boolean(authSession),
+      user: authSession,
+      authConfigured: isAuthConfigured(),
+    });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/auth/google") {
+    try {
+      const payload = (await readJsonBody(req)) as { credential?: unknown };
+      if (typeof payload.credential !== "string" || payload.credential.trim().length === 0) {
+        send(400, { error: "Field credential is required" });
+        return;
+      }
+
+      const user = await verifyGoogleCredential(payload.credential);
+      send(
+        200,
+        { authenticated: true, user },
+        {
+          "Set-Cookie": createSessionCookie(user),
+        },
+      );
+    } catch (error) {
+      send(401, {
+        error: "Failed to authenticate with Google",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/auth/logout") {
+    send(
+      200,
+      { authenticated: false, user: null },
+      {
+        "Set-Cookie": clearSessionCookie(),
+      },
+    );
     return;
   }
 
   if (req.method === "POST" && url.pathname === "/api/sync") {
+    if (!hasAdminAccess(authSession)) {
+      sendAdminRequired(send);
+      return;
+    }
     try {
       const result = await syncCars();
       await pruneNotificationsWithLog();
-      sendJson(res, 200, {
+      send(200, {
         status: "ok",
         syncedCars: result.syncedCars,
         updatedAt: result.updatedAt,
       });
     } catch (error) {
-      sendJson(res, 500, {
+      send(500, {
         error: "Failed to sync cars",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -231,11 +322,15 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
   if (req.method === "GET" && url.pathname === "/api/cars") {
     const forceRefresh = url.searchParams.get("refresh") === "1";
+    if (forceRefresh && !hasAdminAccess(authSession)) {
+      sendAdminRequired(send);
+      return;
+    }
     try {
-      const data = await handleCarsRequest(forceRefresh);
-      sendJson(res, 200, data);
+      const data = await handleCarsRequest(forceRefresh, hasAdminAccess(authSession));
+      send(200, data);
     } catch (error) {
-      sendJson(res, 500, {
+      send(500, {
         error: "Failed to load cars",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -247,9 +342,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     try {
       const limit = Number(url.searchParams.get("limit") ?? 100);
       const data = await getNotificationsFromDb(limit);
-      sendJson(res, 200, data);
+      send(200, data);
     } catch (error) {
-      sendJson(res, 500, {
+      send(500, {
         error: "Failed to load notifications",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -266,9 +361,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         .filter((value) => Number.isInteger(value) && value > 0);
 
       const updated = await markNotificationsRead(ids);
-      sendJson(res, 200, { status: "ok", updated });
+      send(200, { status: "ok", updated });
     } catch (error) {
-      sendJson(res, 500, {
+      send(500, {
         error: "Failed to mark notifications as read",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -277,28 +372,32 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   if (req.method === "POST" && /^\/api\/cars\/\d+\/favorite$/.test(url.pathname)) {
+    if (!hasAdminAccess(authSession)) {
+      sendAdminRequired(send);
+      return;
+    }
     const id = Number(url.pathname.split("/")[3]);
     if (!Number.isInteger(id) || id <= 0) {
-      sendJson(res, 400, { error: "Invalid car id" });
+      send(400, { error: "Invalid car id" });
       return;
     }
 
     try {
       const payload = (await readJsonBody(req)) as { isFavorite?: unknown };
       if (typeof payload.isFavorite !== "boolean") {
-        sendJson(res, 400, { error: "Field isFavorite must be boolean" });
+        send(400, { error: "Field isFavorite must be boolean" });
         return;
       }
 
       const updated = await setCarFavorite(id, payload.isFavorite);
       if (!updated) {
-        sendJson(res, 404, { error: "Car not found" });
+        send(404, { error: "Car not found" });
         return;
       }
 
-      sendJson(res, 200, { status: "ok", id, isFavorite: payload.isFavorite });
+      send(200, { status: "ok", id, isFavorite: payload.isFavorite });
     } catch (error) {
-      sendJson(res, 500, {
+      send(500, {
         error: "Failed to update favorite",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -309,7 +408,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (req.method === "GET" && url.pathname.startsWith("/api/inspection/")) {
     const vehicleId = Number(url.pathname.split("/").pop());
     if (!Number.isInteger(vehicleId) || vehicleId <= 0) {
-      sendJson(res, 400, { error: "Invalid vehicleId" });
+      send(400, { error: "Invalid vehicleId" });
       return;
     }
     try {
@@ -328,9 +427,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         fallbackIds,
         validCarId,
       );
-      sendJson(res, 200, data);
+      send(200, data);
     } catch (error) {
-      sendJson(res, 500, {
+      send(500, {
         error: "Failed to load inspection",
         message: error instanceof Error ? error.message : "Unknown error",
       });
@@ -338,10 +437,16 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     return;
   }
 
-  sendJson(res, 404, { error: "Not found" });
+  send(404, { error: "Not found" });
 });
 
 await runMigrations();
+const missingAuthConfig = getMissingAuthConfig();
+if (missingAuthConfig.length > 0) {
+  console.warn(
+    `[auth] Missing environment variables: ${missingAuthConfig.join(", ")}. Google auth will stay unavailable until they are set.`,
+  );
+}
 startHourlySyncScheduler();
 void (async () => {
   try {

@@ -18,6 +18,7 @@ interface Props {
     sortDir: SortDir;
     selectedId: number | null;
     isFavoritesView?: boolean;
+    canManageFavorites?: boolean;
     onSort: (key: SortKey) => void;
     onSelectRow: (id: number) => void;
     onToggleFavorite: (id: number, isFavorite: boolean) => void;
@@ -49,6 +50,7 @@ export default function CarTable({
     sortDir,
     selectedId,
     isFavoritesView = false,
+    canManageFavorites = false,
     onSort,
     onSelectRow,
     onToggleFavorite,
@@ -149,6 +151,7 @@ export default function CarTable({
                                             <FavoriteButton
                                                 active={Boolean(car.isFavorite)}
                                                 size="sm"
+                                                disabled={!canManageFavorites}
                                                 onToggle={() =>
                                                     onToggleFavorite(
                                                         car.id,
@@ -495,6 +498,7 @@ export default function CarTable({
                                         <td className="whitespace-nowrap py-4">
                                             <FavoriteButton
                                                 active={Boolean(car.isFavorite)}
+                                                disabled={!canManageFavorites}
                                                 onToggle={() =>
                                                     onToggleFavorite(
                                                         car.id,

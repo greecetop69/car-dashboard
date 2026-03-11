@@ -2,12 +2,18 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 export const DEFAULT_HTTP_TIMEOUT_MS = 15000;
 
-export function sendJson(res: ServerResponse, statusCode: number, payload: unknown) {
+export function sendJson(
+  res: ServerResponse,
+  statusCode: number,
+  payload: unknown,
+  headers?: Record<string, string | string[]>,
+) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    ...headers,
   });
   res.end(JSON.stringify(payload));
 }

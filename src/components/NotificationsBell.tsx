@@ -22,11 +22,11 @@ export default function NotificationsBell({ onNavigateToCar }: Props) {
   const groups = groupNotificationsByDate(items);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative shrink-0">
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className={`relative rounded-lg border px-3 py-2 text-sm transition ${
+        className={`relative flex h-[44px] w-[44px] items-center justify-center rounded-lg border text-sm transition ${
           hasUnread
             ? "border-amber-300 bg-amber-50 text-amber-700"
             : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
@@ -42,7 +42,7 @@ export default function NotificationsBell({ onNavigateToCar }: Props) {
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-2 w-[360px] max-w-[92vw] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div className="absolute right-0 z-30 mt-2 w-[min(360px,calc(100vw-1rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl sm:w-[360px]">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <p className="text-sm font-semibold text-slate-800">{title}</p>
             {isFetching && <span className="text-xs text-slate-400">Обновление...</span>}

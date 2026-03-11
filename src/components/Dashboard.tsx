@@ -1,72 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAuthSession, useGoogleLogin, useLogout } from "../hooks/useAuth";
+import {
+  ADMIN_HINT_TEXT,
+  DAMAGE_FILTER_OPTIONS,
+  getDashboardErrorMessage,
+  ORIGIN_FILTER_OPTIONS,
+} from "../constants/dashboard";
 import { useCars, useSyncCars, useToggleFavorite } from "../hooks/useCars";
 import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
 import { formatDateTimeChisinau } from "../utils/dateTime";
 import { fmtKm, fmtWon } from "../utils/format";
 import CarTable from "./CarTable";
+import GoogleLoginButton from "./GoogleLoginButton";
 import NotificationsBell from "./NotificationsBell";
 import RangeFilter from "./RangeFilter";
 import StatsBar from "./StatsBar";
 
-const DAMAGE_FILTER_OPTIONS: Array<{
-  key: "all" | InspectionConditionKey;
-  label: string;
-  activeClass: string;
-}> = [
-  { key: "all", label: "Все", activeClass: "border-blue-300 bg-blue-50 text-blue-700" },
-  { key: "clean", label: "Не бита", activeClass: "border-emerald-300 bg-emerald-50 text-emerald-700" },
-  { key: "repair", label: "Бита (ремонт)", activeClass: "border-amber-300 bg-amber-50 text-amber-700" },
-  { key: "replace", label: "Бита (замена)", activeClass: "border-orange-300 bg-orange-50 text-orange-700" },
-  {
-    key: "replaceRepair",
-    label: "Бита (замена + ремонт)",
-    activeClass: "border-red-300 bg-red-50 text-red-700",
-  },
-  { key: "notFound", label: "Нет отчета", activeClass: "border-slate-300 bg-slate-100 text-slate-700" },
-];
-
-const ORIGIN_FILTER_OPTIONS: Array<{
-  key: "all" | "encar" | "kbcha" | "kcar";
-  label: string;
-  activeClass: string;
-}> = [
-  { key: "all", label: "Все", activeClass: "border-blue-300 bg-blue-50 text-blue-700" },
-  { key: "encar", label: "ENCAR", activeClass: "border-red-300 bg-red-50 text-red-700" },
-  { key: "kbcha", label: "KBCHA", activeClass: "border-amber-300 bg-amber-50 text-amber-800" },
-  { key: "kcar", label: "KCAR", activeClass: "border-violet-300 bg-violet-50 text-violet-800" },
-];
-
 export default function Dashboard() {
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+  const { data: authSession } = useAuthSession();
+  const googleLoginMutation = useGoogleLogin();
+  const logoutMutation = useLogout();
   const { data, isPending, isError } = useCars();
   const toggleFavoriteMutation = useToggleFavorite();
   const syncCarsMutation = useSyncCars();
+
   const [errorToast, setErrorToast] = useState<string | null>(null);
-
-  const cars = data?.cars ?? [];
-  const activeTotal = useMemo(
-    () => cars.filter((car) => car.isActive !== false).length,
-    [cars],
-  );
-  const priceWonLimits = useMemo(() => {
-    if (cars.length === 0) return { min: 0, max: 0 };
-    let min = cars[0].priceWon;
-    let max = cars[0].priceWon;
-    for (const car of cars) {
-      if (car.priceWon < min) min = car.priceWon;
-      if (car.priceWon > max) max = car.priceWon;
-    }
-    return { min, max };
-  }, [cars]);
-  const limits = {
-    minYear: data?.meta?.minYear ?? 0,
-    maxYear: data?.meta?.maxYear ?? 0,
-    minMileage: data?.meta?.minMileage ?? 0,
-    maxMileage: data?.meta?.maxMileage ?? 0,
-    minPriceWon: priceWonLimits.min,
-    maxPriceWon: priceWonLimits.max,
-  };
-
   const [search, setSearch] = useState("");
   const [yearRange, setYearRange] = useState<[number, number]>([0, 0]);
   const [mileRange, setMileRange] = useState<[number, number]>([0, 0]);
@@ -77,21 +37,41 @@ export default function Dashboard() {
   const [originFilter, setOriginFilter] = useState<"all" | "encar" | "kbcha" | "kcar">("all");
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  const currentUser = authSession?.user ?? null;
+  const isAdmin = currentUser?.isAdmin === true;
+  const cars = data?.cars ?? [];
+
+  const activeTotal = useMemo(
+    () => cars.filter((car) => car.isActive !== false).length,
+    [cars],
+  );
+
+  const priceWonLimits = useMemo(() => {
+    if (cars.length === 0) return { min: 0, max: 0 };
+    let min = cars[0].priceWon;
+    let max = cars[0].priceWon;
+    for (const car of cars) {
+      if (car.priceWon < min) min = car.priceWon;
+      if (car.priceWon > max) max = car.priceWon;
+    }
+    return { min, max };
+  }, [cars]);
+
+  const limits = {
+    minYear: data?.meta?.minYear ?? 0,
+    maxYear: data?.meta?.maxYear ?? 0,
+    minMileage: data?.meta?.minMileage ?? 0,
+    maxMileage: data?.meta?.maxMileage ?? 0,
+    minPriceWon: priceWonLimits.min,
+    maxPriceWon: priceWonLimits.max,
+  };
+
   const formattedUpdatedAt = useMemo(() => {
     const updatedAt = data?.updatedAt;
     if (!updatedAt) return null;
     return formatDateTimeChisinau(updatedAt);
   }, [data?.updatedAt]);
-
-  const getErrorMessage = (error: unknown) => {
-    if (typeof error === "object" && error !== null) {
-      const maybe = error as { message?: unknown };
-      if (typeof maybe.message === "string" && maybe.message.trim().length > 0) {
-        return maybe.message;
-      }
-    }
-    return "Запрос не выполнен";
-  };
 
   const conditionByCarId = useMemo(() => {
     const map = new Map<number, InspectionConditionKey>();
@@ -134,33 +114,37 @@ export default function Dashboard() {
     return () => window.clearTimeout(timer);
   }, [errorToast]);
 
-  const readyForFilters = useMemo(() => {
-    return limits.maxYear > 0 && limits.maxMileage >= 0 && limits.maxPriceWon >= 0;
-  }, [limits.maxYear, limits.maxMileage, limits.maxPriceWon]);
+  const readyForFilters = useMemo(
+    () => limits.maxYear > 0 && limits.maxMileage >= 0 && limits.maxPriceWon >= 0,
+    [limits.maxYear, limits.maxMileage, limits.maxPriceWon],
+  );
 
   const filtered = useMemo(() => {
-    return cars.filter((c) => {
+    return cars.filter((car) => {
       const q = search.trim().toLowerCase();
       if (q) {
         const qDigits = q.replace(/\D/g, "");
-        const textFields = [String(c.year), String(c.mileageKm), c.modifiedDate];
-        const numberFields = [String(c.price), String(c.priceWon)];
+        const textFields = [String(car.year), String(car.mileageKm), car.modifiedDate];
+        const numberFields = [String(car.price), String(car.priceWon)];
 
-        const byText = textFields.some((v) => v.toLowerCase().includes(q));
+        const byText = textFields.some((value) => value.toLowerCase().includes(q));
         const byDigits =
           qDigits.length > 0 &&
-          numberFields.some((v) => v.replace(/\D/g, "").includes(qDigits));
+          numberFields.some((value) => value.replace(/\D/g, "").includes(qDigits));
 
         if (!byText && !byDigits) return false;
       }
-      if (c.year < yearRange[0] || c.year > yearRange[1]) return false;
-      if (c.mileageKm < mileRange[0] || c.mileageKm > mileRange[1]) return false;
-      if (c.priceWon < priceRange[0] || c.priceWon > priceRange[1]) return false;
-      if (originFilter !== "all" && c.origin !== originFilter) return false;
+
+      if (car.year < yearRange[0] || car.year > yearRange[1]) return false;
+      if (car.mileageKm < mileRange[0] || car.mileageKm > mileRange[1]) return false;
+      if (car.priceWon < priceRange[0] || car.priceWon > priceRange[1]) return false;
+      if (originFilter !== "all" && car.origin !== originFilter) return false;
+
       if (damageFilter !== "all") {
-        const condition = conditionByCarId.get(c.id);
+        const condition = conditionByCarId.get(car.id);
         if (!condition || condition !== damageFilter) return false;
       }
+
       return true;
     });
   }, [cars, search, yearRange, mileRange, priceRange, originFilter, damageFilter, conditionByCarId]);
@@ -197,19 +181,11 @@ export default function Dashboard() {
     () => sorted.filter((car) => car.isActive !== false).length,
     [sorted],
   );
+
   const activeFavoriteSortedCount = useMemo(
     () => sorted.filter((car) => car.isFavorite && car.isActive !== false).length,
     [sorted],
   );
-
-  function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setSortDir("asc");
-  }
 
   const hasFilters =
     search ||
@@ -221,6 +197,15 @@ export default function Dashboard() {
     mileRange[1] !== limits.maxMileage ||
     priceRange[0] !== limits.minPriceWon ||
     priceRange[1] !== limits.maxPriceWon;
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir("asc");
+  }
 
   function clearAll() {
     setSearch("");
@@ -249,7 +234,9 @@ export default function Dashboard() {
     setActiveTab("all");
     clearAll();
 
-    const targetCar = cars.find((car) => (car.origin ?? "encar") === origin && car.sourceId === sourceId);
+    const targetCar = cars.find(
+      (car) => (car.origin ?? "encar") === origin && car.sourceId === sourceId,
+    );
     if (targetCar) {
       setSelectedId(targetCar.id);
     }
@@ -264,6 +251,40 @@ export default function Dashboard() {
         }
       });
     });
+  }
+
+  function handleGoogleCredential(credential: string) {
+    setErrorToast(null);
+    googleLoginMutation.mutate(credential, {
+      onError: (error) => setErrorToast(getDashboardErrorMessage(error)),
+    });
+  }
+
+  function handleLogout() {
+    logoutMutation.mutate(undefined, {
+      onError: (error) => setErrorToast(getDashboardErrorMessage(error)),
+    });
+  }
+
+  function handleSync() {
+    setErrorToast(null);
+    syncCarsMutation.mutate(undefined, {
+      onError: (error) => setErrorToast(getDashboardErrorMessage(error)),
+    });
+  }
+
+  function handleToggleFavorite(id: number, isFavorite: boolean) {
+    if (!isAdmin) {
+      setErrorToast("Только администратор может менять избранное");
+      return;
+    }
+
+    toggleFavoriteMutation.mutate(
+      { id, isFavorite },
+      {
+        onError: (error) => setErrorToast(getDashboardErrorMessage(error)),
+      },
+    );
   }
 
   if (isPending && !data) {
@@ -284,20 +305,74 @@ export default function Dashboard() {
           {errorToast}
         </div>
       )}
-      <div className="mx-auto max-w-[1680px] px-3 py-6 md:px-4 md:py-8 xl:px-5 xl:py-10">
-        <div className="mb-7">
-          <div className="mb-1 flex items-center justify-between gap-2.5">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-800">
-              Audi A3 - подбор
-            </h1>
-            <NotificationsBell onNavigateToCar={handleNavigateToCar} />
+
+      <div className="mx-auto max-w-[1680px] px-3 py-2 sm:px-4 sm:py-4 xl:px-5 xl:py-6">
+        <div className="mb-6 sm:mb-7">
+          <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="whitespace-nowrap text-[1.85rem] font-semibold leading-none tracking-tight text-slate-800 sm:text-2xl">
+                Audi A3 - подбор
+              </h1>
+              <p className="mt-1 text-sm text-slate-400">
+                База объявлений с фильтрами и сортировкой
+              </p>
+            </div>
+
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap sm:items-center sm:gap-3">
+              {currentUser ? (
+                <div className="flex h-[44px] min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 sm:flex-none">
+                  {currentUser.picture ? (
+                    <img
+                      src={currentUser.picture}
+                      alt={currentUser.name}
+                      className="h-7 w-7 rounded-full border border-slate-200 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-500">
+                      {currentUser.name.slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium leading-none text-slate-700">
+                      {currentUser.name}
+                    </div>
+                    <div className="hidden truncate text-[11px] text-slate-400 sm:block">
+                      {currentUser.email}
+                      {isAdmin ? " · admin" : ""}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    disabled={logoutMutation.isPending}
+                    className="h-8 shrink-0 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {logoutMutation.isPending ? "..." : "Выйти"}
+                  </button>
+                </div>
+              ) : googleClientId ? (
+                <div className="flex min-w-0 flex-1 items-center sm:flex-none">
+                  <GoogleLoginButton
+                    clientId={googleClientId}
+                    disabled={googleLoginMutation.isPending}
+                    onCredential={handleGoogleCredential}
+                  />
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                  Укажите VITE_GOOGLE_CLIENT_ID
+                </div>
+              )}
+
+              <NotificationsBell onNavigateToCar={handleNavigateToCar} />
+            </div>
           </div>
-          <p className="ml-1 text-sm text-slate-400">
-            База объявлений с фильтрами и сортировкой
-          </p>
+
+          {!isAdmin && (
+            <p className="text-xs text-slate-400 sm:text-right">{ADMIN_HINT_TEXT}</p>
+          )}
         </div>
 
-        <div className="mb-4 space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:space-y-5 sm:p-5">
           <div className="relative">
             <input
               value={search}
@@ -310,14 +385,14 @@ export default function Dashboard() {
                 onClick={() => setSearch("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-lg leading-none text-slate-400 hover:text-slate-700"
               >
-                x
+                ×
               </button>
             )}
           </div>
 
           <div className="h-px bg-slate-100" />
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 sm:gap-6">
             <RangeFilter
               label="Год"
               min={limits.minYear}
@@ -382,26 +457,21 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <StatsBar cars={tabFilteredCars} total={activeTotal} />
-            <div className="flex items-center gap-3">
+
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
               {formattedUpdatedAt && (
-                <span className="text-xs font-light text-slate-400">
+                <span className="text-xs font-light text-slate-400 sm:text-right">
                   Последнее обновление: {formattedUpdatedAt}
                 </span>
               )}
               <button
-                onClick={() => {
-                  setErrorToast(null);
-                  syncCarsMutation.mutate(undefined, {
-                    onError: (error) => {
-                      setErrorToast(getErrorMessage(error));
-                    },
-                  });
-                }}
-                disabled={syncCarsMutation.isPending}
+                onClick={handleSync}
+                disabled={!isAdmin || syncCarsMutation.isPending}
+                title={isAdmin ? "Запустить обновление" : "Только администратор может обновлять"}
                 aria-label={syncCarsMutation.isPending ? "Обновление данных" : "Обновить"}
-                className={`relative flex min-w-[104px] items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+                className={`relative flex w-full min-w-[104px] items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:py-1.5 ${
                   syncCarsMutation.isPending ? "text-transparent" : ""
                 }`}
               >
@@ -413,7 +483,7 @@ export default function Dashboard() {
               {hasFilters && (
                 <button
                   onClick={clearAll}
-                  className="text-xs text-blue-500 underline underline-offset-2 transition-colors hover:text-blue-700"
+                  className="text-left text-xs text-blue-500 underline underline-offset-2 transition-colors hover:text-blue-700 sm:text-right"
                 >
                   Сбросить все фильтры
                 </button>
@@ -456,22 +526,17 @@ export default function Dashboard() {
               Избранное ({activeFavoriteSortedCount})
             </button>
           </div>
+
           <CarTable
             cars={tabFilteredCars}
             sortKey={sortKey}
             sortDir={sortDir}
             selectedId={selectedId}
             isFavoritesView={activeTab === "favorites"}
+            canManageFavorites={isAdmin}
             onSort={handleSort}
             onSelectRow={(id) => setSelectedId((prev) => (prev === id ? null : id))}
-            onToggleFavorite={(id, isFavorite) =>
-              toggleFavoriteMutation.mutate(
-                { id, isFavorite },
-                {
-                  onError: (error) => setErrorToast(getErrorMessage(error)),
-                },
-              )
-            }
+            onToggleFavorite={handleToggleFavorite}
           />
         </div>
 
