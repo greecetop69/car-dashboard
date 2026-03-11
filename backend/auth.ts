@@ -54,7 +54,7 @@ function signSessionValue(value: string, secret: string) {
   return createHmac("sha256", secret).update(value).digest("base64url");
 }
 
-function parseCookies(req: IncomingMessage) {
+export function parseCookies(req: IncomingMessage) {
   const raw = req.headers.cookie ?? "";
   const parsed = new Map<string, string>();
   for (const chunk of raw.split(";")) {

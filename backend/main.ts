@@ -6,6 +6,7 @@ import {
   getAuthSession,
   getMissingAuthConfig,
   isAuthConfigured,
+  parseCookies,
   verifyGoogleCredential,
 } from "./auth.js";
 import {
@@ -36,7 +37,7 @@ import { fetchKbchaCars } from "./kbchaService.js";
 import { fetchKcarCars } from "./kcarService.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import type { CarOrigin } from "./carSources.js";
-import { readJsonBody, sendJson } from "./http.js";
+import { readFormBody, readJsonBody, sendJson } from "./http.js";
 
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
@@ -90,6 +91,26 @@ function hasAdminAccess(session: ReturnType<typeof getAuthSession>) {
 
 function sendAdminRequired(send: (statusCode: number, payload: unknown) => void) {
   send(403, { error: "Admin access required" });
+}
+
+function sendRedirect(
+  res: ServerResponse,
+  location: string,
+  headers?: Record<string, string | string[]>,
+) {
+  res.writeHead(303, {
+    Location: location,
+    ...headers,
+  });
+  res.end();
+}
+
+function hasValidGoogleCsrf(req: IncomingMessage, form: URLSearchParams) {
+  const cookieToken = parseCookies(req).get("g_csrf_token")?.trim() ?? "";
+  const formToken = form.get("g_csrf_token")?.trim() ?? "";
+
+  if (!cookieToken || !formToken) return false;
+  return cookieToken === formToken;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
@@ -319,6 +340,31 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         error: "Failed to authenticate with Google",
         message: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/auth/google/callback") {
+    try {
+      const form = await readFormBody(req);
+      if (!hasValidGoogleCsrf(req, form)) {
+        sendRedirect(res, "/?authError=csrf");
+        return;
+      }
+
+      const credential = form.get("credential")?.trim() ?? "";
+      if (!credential) {
+        sendRedirect(res, "/?authError=missing_credential");
+        return;
+      }
+
+      const user = await verifyGoogleCredential(credential);
+      sendRedirect(res, "/", {
+        "Set-Cookie": createSessionCookie(user),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      sendRedirect(res, `/?authError=${encodeURIComponent(message)}`);
     }
     return;
   }

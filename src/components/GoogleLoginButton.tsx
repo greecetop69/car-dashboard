@@ -8,6 +8,8 @@ declare global {
           initialize: (options: {
             client_id: string;
             callback: (response: { credential?: string }) => void;
+            ux_mode?: "popup" | "redirect";
+            login_uri?: string;
           }) => void;
           renderButton: (
             parent: HTMLElement,
@@ -30,6 +32,18 @@ interface Props {
   clientId: string;
   disabled?: boolean;
   onCredential: (credential: string) => void;
+}
+
+function shouldUseRedirectFlow() {
+  if (typeof navigator === "undefined") return false;
+
+  const ua = navigator.userAgent;
+  const isIOS =
+    /iPhone|iPad|iPod/i.test(ua) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+
+  return isIOS || isMobile;
 }
 
 function loadGoogleScript() {
@@ -66,6 +80,8 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
     if (!clientId || disabled || !containerRef.current) return;
 
     let cancelled = false;
+    const useRedirectFlow = shouldUseRedirectFlow();
+    const loginUri = `${window.location.origin}/api/auth/google/callback`;
 
     void loadGoogleScript()
       .then(() => {
@@ -73,6 +89,7 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
         containerRef.current.innerHTML = "";
         window.google.accounts.id.initialize({
           client_id: clientId,
+          ...(useRedirectFlow ? { ux_mode: "redirect" as const, login_uri: loginUri } : {}),
           callback: (response) => {
             if (response.credential) {
               onCredential(response.credential);

@@ -19,14 +19,24 @@ export function sendJson(
 }
 
 export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const raw = await readTextBody(req);
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
+export async function readTextBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
   }
-  if (chunks.length === 0) return {};
+  if (chunks.length === 0) return "";
   const raw = Buffer.concat(chunks).toString("utf-8").trim();
-  if (!raw) return {};
-  return JSON.parse(raw);
+  return raw;
+}
+
+export async function readFormBody(req: IncomingMessage) {
+  const raw = await readTextBody(req);
+  return new URLSearchParams(raw);
 }
 
 export async function fetchWithTimeout(
