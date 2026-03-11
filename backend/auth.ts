@@ -4,10 +4,10 @@ import {
   AUTH_REQUIRED_ENV_VARS,
   getAdminEmail,
   getGoogleClientId,
+  getSessionCookieAttributes,
   getSessionSecret,
   GOOGLE_VERIFY_TIMEOUT_MS,
   SESSION_COOKIE_NAME,
-  SESSION_COOKIE_PATH,
   SESSION_TTL_SEC,
 } from "./config.js";
 import { fetchWithTimeout } from "./http.js";
@@ -117,13 +117,13 @@ export function createSessionCookie(user: AuthSessionUser) {
   };
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const signature = signSessionValue(encodedPayload, secret);
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${SESSION_COOKIE_NAME}=${encodedPayload}.${signature}; ${SESSION_COOKIE_PATH}; Max-Age=${SESSION_TTL_SEC}${secure}`;
+  const cookieAttributes = getSessionCookieAttributes();
+  return `${SESSION_COOKIE_NAME}=${encodedPayload}.${signature}; ${cookieAttributes.serialized}; Max-Age=${SESSION_TTL_SEC}`;
 }
 
 export function clearSessionCookie() {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${SESSION_COOKIE_NAME}=; ${SESSION_COOKIE_PATH}; Max-Age=0${secure}`;
+  const cookieAttributes = getSessionCookieAttributes();
+  return `${SESSION_COOKIE_NAME}=; ${cookieAttributes.serialized}; Max-Age=0`;
 }
 
 export function getAuthSession(req: IncomingMessage): AuthSessionUser | null {

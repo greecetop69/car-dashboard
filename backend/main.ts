@@ -10,8 +10,10 @@ import {
 } from "./auth.js";
 import {
   AUTO_SYNC_ON_STARTUP,
+  getAllowedCorsOrigins,
   MAX_ALLOWED_PRICE_WON,
   PORT,
+  shouldAllowAnyCorsOrigin,
   STALE_SYNC_THRESHOLD_MS,
   STARTUP_REACTIVATE_HOURS,
   SYNC_TIMEOUT_MS,
@@ -41,16 +43,45 @@ let syncTimer: NodeJS.Timeout | null = null;
 
 function getCorsHeaders(req: IncomingMessage): Record<string, string> {
   const origin = req.headers.origin;
+  const allowedOrigins = getAllowedCorsOrigins();
+  const allowAnyOrigin = shouldAllowAnyCorsOrigin();
+
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+
   if (!origin) {
-    return {
-      "Access-Control-Allow-Origin": "*",
-    };
+    return headers;
   }
 
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Credentials": "true",
-  };
+  if (!allowAnyOrigin && !allowedOrigins.includes(origin)) {
+    return headers;
+  }
+
+  headers["Access-Control-Allow-Origin"] = allowAnyOrigin ? origin : origin;
+  headers["Vary"] = "Origin";
+  headers["Access-Control-Allow-Credentials"] = "true";
+
+  return headers;
+}
+
+function isCorsOriginAllowed(req: IncomingMessage) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+
+  if (shouldAllowAnyCorsOrigin()) {
+    return true;
+  }
+
+  const allowedOrigins = getAllowedCorsOrigins();
+  if (allowedOrigins.length === 0) return false;
+
+  return allowedOrigins.includes(origin);
+}
+
+function sendCorsForbidden(send: (statusCode: number, payload: unknown) => void) {
+  send(403, { error: "Origin is not allowed by CORS policy" });
 }
 
 function hasAdminAccess(session: ReturnType<typeof getAuthSession>) {
@@ -234,6 +265,11 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
   if (!req.url) {
     send(400, { error: "Bad Request" });
+    return;
+  }
+
+  if (!isCorsOriginAllowed(req)) {
+    sendCorsForbidden(send);
     return;
   }
 
@@ -445,6 +481,11 @@ const missingAuthConfig = getMissingAuthConfig();
 if (missingAuthConfig.length > 0) {
   console.warn(
     `[auth] Missing environment variables: ${missingAuthConfig.join(", ")}. Google auth will stay unavailable until they are set.`,
+  );
+}
+if (process.env.NODE_ENV === "production" && getAllowedCorsOrigins().length === 0) {
+  console.warn(
+    "[cors] CORS_ALLOWED_ORIGINS is empty in production. Cross-site auth requests will be rejected until allowed frontend origins are configured.",
   );
 }
 startHourlySyncScheduler();
