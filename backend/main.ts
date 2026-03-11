@@ -67,9 +67,15 @@ function getCorsHeaders(req: IncomingMessage): Record<string, string> {
   return headers;
 }
 
-function isCorsOriginAllowed(req: IncomingMessage) {
+function isCorsOriginAllowed(req: IncomingMessage, url: URL) {
   const origin = req.headers.origin;
   if (!origin) return true;
+
+  // Google redirect flow posts the credential from a top-level navigation,
+  // not an XHR from our frontend origin.
+  if (req.method === "POST" && url.pathname === "/api/auth/google/callback") {
+    return true;
+  }
 
   if (shouldAllowAnyCorsOrigin()) {
     return true;
@@ -289,17 +295,17 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     return;
   }
 
-  if (!isCorsOriginAllowed(req)) {
-    sendCorsForbidden(send);
-    return;
-  }
-
   if (req.method === "OPTIONS") {
     send(204, {});
     return;
   }
 
   const url = new URL(req.url, `http://${req.headers.host}`);
+
+  if (!isCorsOriginAllowed(req, url)) {
+    sendCorsForbidden(send);
+    return;
+  }
 
   if (req.method === "GET" && url.pathname === "/api/health") {
     send(200, {
