@@ -57,7 +57,8 @@ VITE_API_URL=http://localhost:3001
 
 ```env
 # .env.prod
-VITE_API_URL=https://car-dashboard-production-01b8.up.railway.app
+# leave empty in production when frontend proxies /api to backend via hosting rewrites
+# VITE_API_URL=
 ```
 
 ## Переменные backend
