@@ -6,13 +6,11 @@ import {
   getAuthSession,
   getMissingAuthConfig,
   isAuthConfigured,
-  parseCookies,
   verifyGoogleCredential,
 } from "./auth.js";
 import {
   AUTO_SYNC_ON_STARTUP,
   getAllowedCorsOrigins,
-  getFrontendUrl,
   MAX_ALLOWED_PRICE_WON,
   PORT,
   shouldAllowAnyCorsOrigin,
@@ -38,7 +36,7 @@ import { fetchKbchaCars } from "./kbchaService.js";
 import { fetchKcarCars } from "./kcarService.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import type { CarOrigin } from "./carSources.js";
-import { readFormBody, readJsonBody, sendHtml, sendJson } from "./http.js";
+import { readJsonBody, sendJson } from "./http.js";
 
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
@@ -68,15 +66,9 @@ function getCorsHeaders(req: IncomingMessage): Record<string, string> {
   return headers;
 }
 
-function isCorsOriginAllowed(req: IncomingMessage, url: URL) {
+function isCorsOriginAllowed(req: IncomingMessage) {
   const origin = req.headers.origin;
   if (!origin) return true;
-
-  // Google redirect flow posts the credential from a top-level navigation,
-  // not an XHR from our frontend origin.
-  if (req.method === "POST" && url.pathname === "/api/auth/google/callback") {
-    return true;
-  }
 
   if (shouldAllowAnyCorsOrigin()) {
     return true;
@@ -98,79 +90,6 @@ function hasAdminAccess(session: ReturnType<typeof getAuthSession>) {
 
 function sendAdminRequired(send: (statusCode: number, payload: unknown) => void) {
   send(403, { error: "Admin access required" });
-}
-
-function logAuthRequest(req: IncomingMessage, url: URL, details?: Record<string, unknown>) {
-  console.info("[auth]", {
-    method: req.method,
-    path: url.pathname,
-    origin: req.headers.origin ?? null,
-    referer: req.headers.referer ?? null,
-    userAgent: req.headers["user-agent"] ?? null,
-    ...details,
-  });
-}
-
-function sendRedirect(
-  res: ServerResponse,
-  location: string,
-  headers?: Record<string, string | string[]>,
-) {
-  res.writeHead(303, {
-    Location: location,
-    ...headers,
-  });
-  res.end();
-}
-
-function sendHtmlRedirect(
-  res: ServerResponse,
-  location: string,
-  headers?: Record<string, string | string[]>,
-) {
-  const safeLocation = JSON.stringify(location);
-  sendHtml(
-    res,
-    200,
-    `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="0;url=${location}">
-    <title>Signing in...</title>
-  </head>
-  <body>
-    <p>Signing in...</p>
-    <script>
-      window.location.replace(${safeLocation});
-    </script>
-  </body>
-</html>`,
-    headers,
-  );
-}
-
-function resolveFrontendRedirectUrl(url: URL) {
-  const returnTo = url.searchParams.get("return_to")?.trim() ?? "";
-  if (/^https?:\/\//i.test(returnTo)) {
-    return returnTo;
-  }
-
-  const frontendUrl = getFrontendUrl();
-  if (frontendUrl) {
-    return `${frontendUrl}/`;
-  }
-
-  return "/";
-}
-
-function hasValidGoogleCsrf(req: IncomingMessage, form: URLSearchParams) {
-  const cookieToken = parseCookies(req).get("g_csrf_token")?.trim() ?? "";
-  const formToken = form.get("g_csrf_token")?.trim() ?? "";
-
-  if (!cookieToken || !formToken) return false;
-  return cookieToken === formToken;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
@@ -356,7 +275,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (!isCorsOriginAllowed(req, url)) {
+  if (!isCorsOriginAllowed(req)) {
     sendCorsForbidden(send);
     return;
   }
@@ -371,10 +290,6 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   if (req.method === "GET" && url.pathname === "/api/auth/session") {
-    logAuthRequest(req, url, {
-      authenticated: Boolean(authSession),
-      email: authSession?.email ?? null,
-    });
     send(200, {
       authenticated: Boolean(authSession),
       user: authSession,
@@ -386,20 +301,12 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (req.method === "POST" && url.pathname === "/api/auth/google") {
     try {
       const payload = (await readJsonBody(req)) as { credential?: unknown };
-      logAuthRequest(req, url, {
-        hasCredential: typeof payload.credential === "string" && payload.credential.trim().length > 0,
-      });
       if (typeof payload.credential !== "string" || payload.credential.trim().length === 0) {
         send(400, { error: "Field credential is required" });
         return;
       }
 
       const user = await verifyGoogleCredential(payload.credential);
-      logAuthRequest(req, url, {
-        result: "success",
-        email: user.email,
-        isAdmin: user.isAdmin,
-      });
       send(
         200,
         { authenticated: true, user },
@@ -408,68 +315,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         },
       );
     } catch (error) {
-      logAuthRequest(req, url, {
-        result: "error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      });
       send(401, {
         error: "Failed to authenticate with Google",
         message: error instanceof Error ? error.message : "Unknown error",
       });
-    }
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/api/auth/google/callback") {
-    try {
-      const form = await readFormBody(req);
-      const frontendRedirectUrl = resolveFrontendRedirectUrl(url);
-      logAuthRequest(req, url, {
-        hasCredential: Boolean(form.get("credential")?.trim()),
-        hasCsrfCookie: Boolean(parseCookies(req).get("g_csrf_token")?.trim()),
-        hasCsrfForm: Boolean(form.get("g_csrf_token")?.trim()),
-        returnTo: frontendRedirectUrl,
-      });
-      if (!hasValidGoogleCsrf(req, form)) {
-        logAuthRequest(req, url, {
-          result: "redirect_csrf",
-        });
-        sendHtmlRedirect(res, `${frontendRedirectUrl}${frontendRedirectUrl.includes("?") ? "&" : "?"}authError=csrf`);
-        return;
-      }
-
-      const credential = form.get("credential")?.trim() ?? "";
-      if (!credential) {
-        logAuthRequest(req, url, {
-          result: "redirect_missing_credential",
-        });
-        sendHtmlRedirect(
-          res,
-          `${frontendRedirectUrl}${frontendRedirectUrl.includes("?") ? "&" : "?"}authError=missing_credential`,
-        );
-        return;
-      }
-
-      const user = await verifyGoogleCredential(credential);
-      logAuthRequest(req, url, {
-        result: "success",
-        email: user.email,
-        isAdmin: user.isAdmin,
-      });
-      sendHtmlRedirect(res, frontendRedirectUrl, {
-        "Set-Cookie": createSessionCookie(user),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      const frontendRedirectUrl = resolveFrontendRedirectUrl(url);
-      logAuthRequest(req, url, {
-        result: "redirect_error",
-        message,
-      });
-      sendHtmlRedirect(
-        res,
-        `${frontendRedirectUrl}${frontendRedirectUrl.includes("?") ? "&" : "?"}authError=${encodeURIComponent(message)}`,
-      );
     }
     return;
   }

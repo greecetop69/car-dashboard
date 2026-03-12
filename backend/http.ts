@@ -18,22 +18,6 @@ export function sendJson(
   res.end(JSON.stringify(payload));
 }
 
-export function sendHtml(
-  res: ServerResponse,
-  statusCode: number,
-  html: string,
-  headers?: Record<string, string | string[]>,
-) {
-  res.writeHead(statusCode, {
-    "Content-Type": "text/html; charset=utf-8",
-    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-    Pragma: "no-cache",
-    Expires: "0",
-    ...headers,
-  });
-  res.end(html);
-}
-
 export async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const raw = await readTextBody(req);
   if (!raw) return {};
