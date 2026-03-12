@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { logAuthDebug } from "../utils/authDebug";
 
 declare global {
   interface Window {
@@ -83,14 +84,25 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
     const useRedirectFlow = shouldUseRedirectFlow();
     const loginUri = `${window.location.origin}/api/auth/google/callback`;
 
+    logAuthDebug("google_button_prepare", {
+      useRedirectFlow,
+      loginUri: useRedirectFlow ? loginUri : null,
+      href: window.location.href,
+    });
+
     void loadGoogleScript()
       .then(() => {
         if (cancelled || !containerRef.current || !window.google?.accounts?.id) return;
         containerRef.current.innerHTML = "";
+        logAuthDebug("google_script_ready", { useRedirectFlow });
         window.google.accounts.id.initialize({
           client_id: clientId,
           ...(useRedirectFlow ? { ux_mode: "redirect" as const, login_uri: loginUri } : {}),
           callback: (response) => {
+            logAuthDebug("google_callback", {
+              hasCredential: Boolean(response.credential),
+              credentialLength: response.credential?.length ?? 0,
+            });
             if (response.credential) {
               onCredential(response.credential);
             }
@@ -105,14 +117,26 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
           width: Math.min(containerRef.current.clientWidth || 280, 320),
         });
       })
-      .catch(() => {
+      .catch((error) => {
+        logAuthDebug("google_script_failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
         if (!containerRef.current) return;
         containerRef.current.innerHTML =
           '<div class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">Google Sign-In load failed</div>';
       });
 
+    const handlePageHide = () => {
+      logAuthDebug("pagehide", {
+        href: window.location.href,
+        useRedirectFlow,
+      });
+    };
+    window.addEventListener("pagehide", handlePageHide);
+
     return () => {
       cancelled = true;
+      window.removeEventListener("pagehide", handlePageHide);
     };
   }, [clientId, disabled, onCredential]);
 

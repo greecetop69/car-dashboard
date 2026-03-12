@@ -3,10 +3,14 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./index.css";
 import App from "./App";
+import {
+  isAuthDebugEnabled,
+  logAuthDebugBoot,
+  syncAuthDebugFlagFromUrl,
+} from "./utils/authDebug";
 
 function enableMobileDebugTools() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("debug") !== "1") return;
+  if (!isAuthDebugEnabled()) return;
   if ((window as typeof window & { eruda?: { init: () => void } }).eruda) return;
  
   const script = document.createElement("script");
@@ -19,7 +23,9 @@ function enableMobileDebugTools() {
   document.head.appendChild(script);
 }
 
+syncAuthDebugFlagFromUrl();
 enableMobileDebugTools();
+logAuthDebugBoot();
 
 const queryClient = new QueryClient({
   defaultOptions: {

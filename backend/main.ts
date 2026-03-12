@@ -99,6 +99,17 @@ function sendAdminRequired(send: (statusCode: number, payload: unknown) => void)
   send(403, { error: "Admin access required" });
 }
 
+function logAuthRequest(req: IncomingMessage, url: URL, details?: Record<string, unknown>) {
+  console.info("[auth]", {
+    method: req.method,
+    path: url.pathname,
+    origin: req.headers.origin ?? null,
+    referer: req.headers.referer ?? null,
+    userAgent: req.headers["user-agent"] ?? null,
+    ...details,
+  });
+}
+
 function sendRedirect(
   res: ServerResponse,
   location: string,
@@ -317,6 +328,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   if (req.method === "GET" && url.pathname === "/api/auth/session") {
+    logAuthRequest(req, url, {
+      authenticated: Boolean(authSession),
+      email: authSession?.email ?? null,
+    });
     send(200, {
       authenticated: Boolean(authSession),
       user: authSession,
@@ -328,12 +343,20 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (req.method === "POST" && url.pathname === "/api/auth/google") {
     try {
       const payload = (await readJsonBody(req)) as { credential?: unknown };
+      logAuthRequest(req, url, {
+        hasCredential: typeof payload.credential === "string" && payload.credential.trim().length > 0,
+      });
       if (typeof payload.credential !== "string" || payload.credential.trim().length === 0) {
         send(400, { error: "Field credential is required" });
         return;
       }
 
       const user = await verifyGoogleCredential(payload.credential);
+      logAuthRequest(req, url, {
+        result: "success",
+        email: user.email,
+        isAdmin: user.isAdmin,
+      });
       send(
         200,
         { authenticated: true, user },
@@ -342,6 +365,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         },
       );
     } catch (error) {
+      logAuthRequest(req, url, {
+        result: "error",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
       send(401, {
         error: "Failed to authenticate with Google",
         message: error instanceof Error ? error.message : "Unknown error",
@@ -353,23 +380,43 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (req.method === "POST" && url.pathname === "/api/auth/google/callback") {
     try {
       const form = await readFormBody(req);
+      logAuthRequest(req, url, {
+        hasCredential: Boolean(form.get("credential")?.trim()),
+        hasCsrfCookie: Boolean(parseCookies(req).get("g_csrf_token")?.trim()),
+        hasCsrfForm: Boolean(form.get("g_csrf_token")?.trim()),
+      });
       if (!hasValidGoogleCsrf(req, form)) {
+        logAuthRequest(req, url, {
+          result: "redirect_csrf",
+        });
         sendRedirect(res, "/?authError=csrf");
         return;
       }
 
       const credential = form.get("credential")?.trim() ?? "";
       if (!credential) {
+        logAuthRequest(req, url, {
+          result: "redirect_missing_credential",
+        });
         sendRedirect(res, "/?authError=missing_credential");
         return;
       }
 
       const user = await verifyGoogleCredential(credential);
+      logAuthRequest(req, url, {
+        result: "success",
+        email: user.email,
+        isAdmin: user.isAdmin,
+      });
       sendRedirect(res, "/", {
         "Set-Cookie": createSessionCookie(user),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
+      logAuthRequest(req, url, {
+        result: "redirect_error",
+        message,
+      });
       sendRedirect(res, `/?authError=${encodeURIComponent(message)}`);
     }
     return;

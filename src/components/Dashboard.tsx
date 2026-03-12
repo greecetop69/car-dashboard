@@ -12,6 +12,7 @@ import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
 import { compareByCaromotoPrice } from "../utils/caromoto";
 import { formatDateTimeChisinau } from "../utils/dateTime";
 import { fmtKm, fmtWon } from "../utils/format";
+import { logAuthDebug } from "../utils/authDebug";
 import CarTable from "./CarTable";
 import GoogleLoginButton from "./GoogleLoginButton";
 import NotificationsBell from "./NotificationsBell";
@@ -114,6 +115,14 @@ export default function Dashboard() {
     const timer = window.setTimeout(() => setErrorToast(null), 4500);
     return () => window.clearTimeout(timer);
   }, [errorToast]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get("authError");
+    if (!authError) return;
+
+    logAuthDebug("auth_error_param", { authError });
+  }, []);
 
   const readyForFilters = useMemo(
     () => limits.maxYear > 0 && limits.maxMileage >= 0 && limits.maxPriceWon >= 0,
