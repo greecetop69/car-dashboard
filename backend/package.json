@@ -11,7 +11,8 @@
     "db:up": "docker compose -f ../docker-compose.yml up -d mysql",
     "db:down": "docker compose -f ../docker-compose.yml down",
     "db:logs": "docker compose -f ../docker-compose.yml logs -f mysql",
-    "db:dump": "docker exec -e MYSQL_PWD=car_password car-dashboard-mysql mysqldump -ucar_user car_dashboard > ../db_dump.sql",
+    "db:dump": "tsx scripts/db-dump.ts",
+    "db:dump:local": "docker exec -e MYSQL_PWD=car_password car-dashboard-mysql mysqldump -ucar_user car_dashboard > ../db_dump.sql",
     "db:import": "docker exec -i -e MYSQL_PWD=car_password car-dashboard-mysql mysql -ucar_user car_dashboard < ../db_dump.sql",
     "migrate:run": "tsx scripts/migrate-run.ts",
     "migrate:revert": "tsx scripts/migrate-revert.ts"
