@@ -41,7 +41,7 @@ export default function PriceTrendWon({ car }: { car: Car }) {
         </span>
       </div>
 
-      <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-80 rounded-lg border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block">
+      <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 hidden w-80 max-w-[min(20rem,calc(100vw-2rem))] whitespace-normal rounded-lg border border-slate-200 bg-white p-4 text-left shadow-xl group-hover:block">
         <div className="mb-2 text-sm font-semibold text-slate-700">История изменений (₩)</div>
         <div className="max-h-56 space-y-1.5 overflow-auto">
           {changeRows.length === 0 && (
@@ -52,10 +52,10 @@ export default function PriceTrendWon({ car }: { car: Car }) {
             return (
               <div
                 key={`${item.recordedAt}-${idx}`}
-                className="flex items-center justify-between text-sm"
+                className="flex items-start justify-between gap-3 text-sm"
               >
-                <span className="text-slate-500">{formatDateTimeChisinau(item.recordedAt)}</span>
-                <span className={up ? "font-semibold text-red-600" : "font-semibold text-emerald-600"}>
+                <span className="min-w-0 text-slate-500">{formatDateTimeChisinau(item.recordedAt)}</span>
+                <span className={up ? "shrink-0 font-semibold text-red-600" : "shrink-0 font-semibold text-emerald-600"}>
                   {up ? "+" : "-"}
                   {fmtWon(Math.abs(item.diff))}
                 </span>

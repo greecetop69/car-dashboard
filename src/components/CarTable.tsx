@@ -95,6 +95,8 @@ export default function CarTable({
                                 : wonTrend === "down"
                                   ? "text-emerald-600"
                                   : "text-slate-700";
+                        const favoriteDisabled =
+                            !canManageFavorites || isInactive;
 
                         return (
                             <div
@@ -106,7 +108,7 @@ export default function CarTable({
                                 }}
                                 className={`rounded-2xl border bg-white p-3 shadow-sm transition-colors ${
                                     isInactive
-                                        ? "border-slate-200 bg-slate-100/70 opacity-70"
+                                        ? "border-slate-200 bg-slate-100/70"
                                         : isSelected
                                           ? "border-blue-300 bg-blue-50"
                                           : "border-slate-200"
@@ -153,7 +155,7 @@ export default function CarTable({
                                             <FavoriteButton
                                                 active={Boolean(car.isFavorite)}
                                                 size="sm"
-                                                disabled={!canManageFavorites}
+                                                disabled={favoriteDisabled}
                                                 onToggle={() =>
                                                     onToggleFavorite(
                                                         car.id,
@@ -325,6 +327,8 @@ export default function CarTable({
                                 const caromotoPrice = getCaromotoPriceEur(car);
                                 const externalCarUrl = getExternalCarUrl(car);
                                 const originBadge = getOriginBadge(car.origin);
+                                const favoriteDisabled =
+                                    !canManageFavorites || isInactive;
 
                                 return (
                                     <tr
@@ -337,7 +341,7 @@ export default function CarTable({
                                         }}
                                         className={`border-b border-slate-100 transition-colors ${
                                             isInactive
-                                                ? "bg-slate-200/70 opacity-55"
+                                                ? "bg-slate-200/70"
                                                 : isSelected
                                                   ? "cursor-pointer bg-blue-50"
                                                   : isEven
@@ -501,7 +505,7 @@ export default function CarTable({
                                         <td className="whitespace-nowrap py-4">
                                             <FavoriteButton
                                                 active={Boolean(car.isFavorite)}
-                                                disabled={!canManageFavorites}
+                                                disabled={favoriteDisabled}
                                                 onToggle={() =>
                                                     onToggleFavorite(
                                                         car.id,
