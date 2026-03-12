@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import type { Car, SortDir, SortKey } from "../types/car";
 import { getCaromotoPriceEur } from "../utils/caromoto";
+import { getExternalCarUrl } from "../utils/externalLinks";
 import { fmtEur, fmtKm, fmtWon } from "../utils/format";
 import DamageBadge from "./car-table/DamageBadge";
 import InspectionModal from "./car-table/InspectionModal";
@@ -78,6 +79,7 @@ export default function CarTable({
                         const isNew = car.isNew === true;
                         const isSelected = selectedId === car.id;
                         const caromotoPrice = getCaromotoPriceEur(car);
+                        const externalCarUrl = getExternalCarUrl(car);
                         const originBadge = getOriginBadge(car.origin);
                         const carOrigin = car.origin ?? "encar";
                         const carSourceId = car.sourceId ?? "";
@@ -216,7 +218,7 @@ export default function CarTable({
                                         </Button>
                                     )}
                                     <OpenExternalLink
-                                        href={car.url}
+                                        href={externalCarUrl}
                                         className={MOBILE_OPEN_LINK_CLASS}
                                     >
                                         Открыть
@@ -321,6 +323,7 @@ export default function CarTable({
                                     ? "text-slate-500"
                                     : "text-slate-800";
                                 const caromotoPrice = getCaromotoPriceEur(car);
+                                const externalCarUrl = getExternalCarUrl(car);
                                 const originBadge = getOriginBadge(car.origin);
 
                                 return (
@@ -512,7 +515,7 @@ export default function CarTable({
                                         </td>
                                         <td className="whitespace-nowrap py-4">
                                             <OpenExternalLink
-                                                href={car.url}
+                                                href={externalCarUrl}
                                                 className={
                                                     TABLE_OPEN_LINK_CLASS
                                                 }
