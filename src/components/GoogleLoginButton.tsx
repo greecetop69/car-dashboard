@@ -76,17 +76,11 @@ function loadGoogleScript() {
 }
 
 function resolveGoogleLoginUri() {
-  const currentUrl = new URL(window.location.href);
-  currentUrl.searchParams.delete("authError");
-
   const apiOrigin = /^https?:\/\//i.test(appConfig.apiUrl)
     ? appConfig.apiUrl
     : window.location.origin;
 
-  const loginUrl = new URL(`${apiOrigin.replace(/\/+$/, "")}/api/auth/google/callback`);
-  loginUrl.searchParams.set("return_to", currentUrl.toString());
-
-  return loginUrl.toString();
+  return `${apiOrigin.replace(/\/+$/, "")}/api/auth/google/callback`;
 }
 
 export default function GoogleLoginButton({ clientId, disabled = false, onCredential }: Props) {
