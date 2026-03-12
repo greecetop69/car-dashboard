@@ -12,15 +12,9 @@ function resolveApiBaseUrl() {
     return normalizedApiUrl ? `${normalizedApiUrl}/api` : "/api";
   }
 
-  if (!normalizedApiUrl || normalizedApiUrl === "/" || normalizedApiUrl === "/api") {
-    return "/api";
-  }
-
-  if (/^https?:\/\//i.test(normalizedApiUrl)) {
-    return `${normalizedApiUrl}/api`;
-  }
-
-  return normalizedApiUrl.startsWith("/api") ? normalizedApiUrl : `${normalizedApiUrl}/api`;
+  // In production the frontend is served behind Vercel rewrites.
+  // Using same-origin /api keeps the auth cookie first-party on iOS Safari.
+  return "/api";
 }
 
 export const apiBaseUrl = resolveApiBaseUrl();
