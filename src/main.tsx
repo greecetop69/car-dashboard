@@ -8,7 +8,7 @@ function enableMobileDebugTools() {
   const params = new URLSearchParams(window.location.search);
   if (params.get("debug") !== "1") return;
   if ((window as typeof window & { eruda?: { init: () => void } }).eruda) return;
-
+ 
   const script = document.createElement("script");
   script.src = "https://cdn.jsdelivr.net/npm/eruda";
   script.async = true;
