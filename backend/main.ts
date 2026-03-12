@@ -37,7 +37,7 @@ import { fetchKbchaCars } from "./kbchaService.js";
 import { fetchKcarCars } from "./kcarService.js";
 import { getInspectionSummaryWithCarCache } from "./inspectionService.js";
 import type { CarOrigin } from "./carSources.js";
-import { readFormBody, readJsonBody, sendJson } from "./http.js";
+import { readFormBody, readJsonBody, sendHtml, sendJson } from "./http.js";
 
 let syncInFlight: Promise<SyncResult> | null = null;
 let syncTimer: NodeJS.Timeout | null = null;
@@ -120,6 +120,34 @@ function sendRedirect(
     ...headers,
   });
   res.end();
+}
+
+function sendHtmlRedirect(
+  res: ServerResponse,
+  location: string,
+  headers?: Record<string, string | string[]>,
+) {
+  const safeLocation = JSON.stringify(location);
+  sendHtml(
+    res,
+    200,
+    `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="0;url=${location}">
+    <title>Signing in...</title>
+  </head>
+  <body>
+    <p>Signing in...</p>
+    <script>
+      window.location.replace(${safeLocation});
+    </script>
+  </body>
+</html>`,
+    headers,
+  );
 }
 
 function hasValidGoogleCsrf(req: IncomingMessage, form: URLSearchParams) {
@@ -389,7 +417,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         logAuthRequest(req, url, {
           result: "redirect_csrf",
         });
-        sendRedirect(res, "/?authError=csrf");
+        sendHtmlRedirect(res, "/?authError=csrf");
         return;
       }
 
@@ -398,7 +426,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         logAuthRequest(req, url, {
           result: "redirect_missing_credential",
         });
-        sendRedirect(res, "/?authError=missing_credential");
+        sendHtmlRedirect(res, "/?authError=missing_credential");
         return;
       }
 
@@ -408,7 +436,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         email: user.email,
         isAdmin: user.isAdmin,
       });
-      sendRedirect(res, "/", {
+      sendHtmlRedirect(res, "/", {
         "Set-Cookie": createSessionCookie(user),
       });
     } catch (error) {
@@ -417,7 +445,7 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         result: "redirect_error",
         message,
       });
-      sendRedirect(res, `/?authError=${encodeURIComponent(message)}`);
+      sendHtmlRedirect(res, `/?authError=${encodeURIComponent(message)}`);
     }
     return;
   }
