@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { logAuthDebug } from "../utils/authDebug";
-import { appConfig } from "../config/app";
 
 declare global {
   interface Window {
@@ -10,8 +9,6 @@ declare global {
           initialize: (options: {
             client_id: string;
             callback: (response: { credential?: string }) => void;
-            ux_mode?: "popup" | "redirect";
-            login_uri?: string;
           }) => void;
           renderButton: (
             parent: HTMLElement,
@@ -34,18 +31,6 @@ interface Props {
   clientId: string;
   disabled?: boolean;
   onCredential: (credential: string) => void;
-}
-
-function shouldUseRedirectFlow() {
-  if (typeof navigator === "undefined") return false;
-
-  const ua = navigator.userAgent;
-  const isIOS =
-    /iPhone|iPad|iPod/i.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-
-  return isIOS || isMobile;
 }
 
 function loadGoogleScript() {
@@ -75,14 +60,6 @@ function loadGoogleScript() {
   });
 }
 
-function resolveGoogleLoginUri() {
-  const apiOrigin = /^https?:\/\//i.test(appConfig.apiUrl)
-    ? appConfig.apiUrl
-    : window.location.origin;
-
-  return `${apiOrigin.replace(/\/+$/, "")}/api/auth/google/callback`;
-}
-
 export default function GoogleLoginButton({ clientId, disabled = false, onCredential }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -90,12 +67,10 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
     if (!clientId || disabled || !containerRef.current) return;
 
     let cancelled = false;
-    const useRedirectFlow = shouldUseRedirectFlow();
-    const loginUri = resolveGoogleLoginUri();
 
     logAuthDebug("google_button_prepare", {
-      useRedirectFlow,
-      loginUri: useRedirectFlow ? loginUri : null,
+      useRedirectFlow: false,
+      loginUri: null,
       href: window.location.href,
     });
 
@@ -103,10 +78,9 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
       .then(() => {
         if (cancelled || !containerRef.current || !window.google?.accounts?.id) return;
         containerRef.current.innerHTML = "";
-        logAuthDebug("google_script_ready", { useRedirectFlow });
+        logAuthDebug("google_script_ready", { useRedirectFlow: false });
         window.google.accounts.id.initialize({
           client_id: clientId,
-          ...(useRedirectFlow ? { ux_mode: "redirect" as const, login_uri: loginUri } : {}),
           callback: (response) => {
             logAuthDebug("google_callback", {
               hasCredential: Boolean(response.credential),
@@ -138,7 +112,7 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
     const handlePageHide = () => {
       logAuthDebug("pagehide", {
         href: window.location.href,
-        useRedirectFlow,
+        useRedirectFlow: false,
       });
     };
     window.addEventListener("pagehide", handlePageHide);
