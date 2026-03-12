@@ -12,6 +12,7 @@ import {
 import {
   AUTO_SYNC_ON_STARTUP,
   getAllowedCorsOrigins,
+  getFrontendUrl,
   MAX_ALLOWED_PRICE_WON,
   PORT,
   shouldAllowAnyCorsOrigin,
@@ -148,6 +149,20 @@ function sendHtmlRedirect(
 </html>`,
     headers,
   );
+}
+
+function resolveFrontendRedirectUrl(url: URL) {
+  const returnTo = url.searchParams.get("return_to")?.trim() ?? "";
+  if (/^https?:\/\//i.test(returnTo)) {
+    return returnTo;
+  }
+
+  const frontendUrl = getFrontendUrl();
+  if (frontendUrl) {
+    return `${frontendUrl}/`;
+  }
+
+  return "/";
 }
 
 function hasValidGoogleCsrf(req: IncomingMessage, form: URLSearchParams) {
@@ -408,16 +423,18 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   if (req.method === "POST" && url.pathname === "/api/auth/google/callback") {
     try {
       const form = await readFormBody(req);
+      const frontendRedirectUrl = resolveFrontendRedirectUrl(url);
       logAuthRequest(req, url, {
         hasCredential: Boolean(form.get("credential")?.trim()),
         hasCsrfCookie: Boolean(parseCookies(req).get("g_csrf_token")?.trim()),
         hasCsrfForm: Boolean(form.get("g_csrf_token")?.trim()),
+        returnTo: frontendRedirectUrl,
       });
       if (!hasValidGoogleCsrf(req, form)) {
         logAuthRequest(req, url, {
           result: "redirect_csrf",
         });
-        sendHtmlRedirect(res, "/?authError=csrf");
+        sendHtmlRedirect(res, `${frontendRedirectUrl}${frontendRedirectUrl.includes("?") ? "&" : "?"}authError=csrf`);
         return;
       }
 
@@ -426,7 +443,10 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         logAuthRequest(req, url, {
           result: "redirect_missing_credential",
         });
-        sendHtmlRedirect(res, "/?authError=missing_credential");
+        sendHtmlRedirect(
+          res,
+          `${frontendRedirectUrl}${frontendRedirectUrl.includes("?") ? "&" : "?"}authError=missing_credential`,
+        );
         return;
       }
 
@@ -436,16 +456,20 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         email: user.email,
         isAdmin: user.isAdmin,
       });
-      sendHtmlRedirect(res, "/", {
+      sendHtmlRedirect(res, frontendRedirectUrl, {
         "Set-Cookie": createSessionCookie(user),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
+      const frontendRedirectUrl = resolveFrontendRedirectUrl(url);
       logAuthRequest(req, url, {
         result: "redirect_error",
         message,
       });
-      sendHtmlRedirect(res, `/?authError=${encodeURIComponent(message)}`);
+      sendHtmlRedirect(
+        res,
+        `${frontendRedirectUrl}${frontendRedirectUrl.includes("?") ? "&" : "?"}authError=${encodeURIComponent(message)}`,
+      );
     }
     return;
   }

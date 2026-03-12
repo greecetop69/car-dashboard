@@ -31,6 +31,10 @@ export function getSessionSecret() {
   return process.env.AUTH_SESSION_SECRET?.trim() ?? "";
 }
 
+export function getFrontendUrl() {
+  return process.env.FRONTEND_URL?.trim().replace(/\/+$/, "") ?? "";
+}
+
 export function isProduction() {
   return process.env.NODE_ENV === "production";
 }

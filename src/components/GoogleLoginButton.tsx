@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { logAuthDebug } from "../utils/authDebug";
+import { appConfig } from "../config/app";
 
 declare global {
   interface Window {
@@ -74,6 +75,20 @@ function loadGoogleScript() {
   });
 }
 
+function resolveGoogleLoginUri() {
+  const currentUrl = new URL(window.location.href);
+  currentUrl.searchParams.delete("authError");
+
+  const apiOrigin = /^https?:\/\//i.test(appConfig.apiUrl)
+    ? appConfig.apiUrl
+    : window.location.origin;
+
+  const loginUrl = new URL(`${apiOrigin.replace(/\/+$/, "")}/api/auth/google/callback`);
+  loginUrl.searchParams.set("return_to", currentUrl.toString());
+
+  return loginUrl.toString();
+}
+
 export default function GoogleLoginButton({ clientId, disabled = false, onCredential }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,7 +97,7 @@ export default function GoogleLoginButton({ clientId, disabled = false, onCreden
 
     let cancelled = false;
     const useRedirectFlow = shouldUseRedirectFlow();
-    const loginUri = `${window.location.origin}/api/auth/google/callback`;
+    const loginUri = resolveGoogleLoginUri();
 
     logAuthDebug("google_button_prepare", {
       useRedirectFlow,
