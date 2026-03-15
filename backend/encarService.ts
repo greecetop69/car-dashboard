@@ -55,6 +55,13 @@ function toKishinevTime(modifiedDate?: string) {
   }
 }
 
+function parseModifiedDateMs(modifiedDate?: string) {
+  if (!modifiedDate) return 0;
+  const normalized = modifiedDate.replace(" +09", "+09:00");
+  const parsedMs = Date.parse(normalized);
+  return Number.isFinite(parsedMs) ? parsedMs : 0;
+}
+
 function normalizeCar(car: RawCar) {
   const photos = Array.isArray(car.Photos)
     ? car.Photos.map((p) => ({
@@ -72,6 +79,7 @@ function normalizeCar(car: RawCar) {
     mileageKm: car.Mileage ?? 0,
     priceWon: (car.Price ?? 0) * 10000,
     modifiedDate: toKishinevTime(car.ModifiedDate),
+    modifiedDateMs: parseModifiedDateMs(car.ModifiedDate),
     mainPhoto: photos[0]?.location ?? null,
     photos,
     hasInspection: (car.Condition ?? []).includes("Inspection"),
@@ -105,13 +113,30 @@ async function fetchOnePage(type: string, offset: number) {
 }
 
 function deduplicate(cars: NormalizedCar[]) {
-  const seenSource = new Set<string>();
+  const bySource = new Map<string, NormalizedCar>();
   const seenFingerprint = new Set<string>();
-  return cars.filter((car) => {
-    const sourceKey = car.sourceId || "";
-    if (sourceKey && seenSource.has(sourceKey)) return false;
-    if (sourceKey) seenSource.add(sourceKey);
 
+  for (const car of cars) {
+    const sourceKey = car.sourceId || "";
+    if (!sourceKey) continue;
+
+    const existing = bySource.get(sourceKey);
+    if (!existing) {
+      bySource.set(sourceKey, car);
+      continue;
+    }
+
+    const shouldReplace =
+      car.modifiedDateMs > existing.modifiedDateMs ||
+      (car.modifiedDateMs === existing.modifiedDateMs &&
+        car.priceWon < existing.priceWon);
+
+    if (shouldReplace) {
+      bySource.set(sourceKey, car);
+    }
+  }
+
+  return [...bySource.values()].filter((car) => {
     // Encar can return duplicate listings with different ids (premium/general feeds).
     const fingerprint = `${car.year}|${car.mileageKm}|${car.priceWon}`;
     if (seenFingerprint.has(fingerprint)) return false;
