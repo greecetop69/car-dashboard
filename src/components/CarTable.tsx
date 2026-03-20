@@ -1,8 +1,7 @@
 ﻿import { useState } from "react";
 import type { Car, SortDir, SortKey } from "../types/car";
-import { getCaromotoPriceEur } from "../utils/caromoto";
 import { getExternalCarUrl } from "../utils/externalLinks";
-import { fmtEur, fmtKm, fmtWon } from "../utils/format";
+import { fmtEur, fmtKm, fmtMdl, fmtUsd, fmtWon } from "../utils/format";
 import DamageBadge from "./car-table/DamageBadge";
 import InspectionModal from "./car-table/InspectionModal";
 import CarPhoto from "./car-table/CarPhoto";
@@ -28,7 +27,9 @@ interface Props {
 const COLUMNS: { key: SortKey; label: string }[] = [
     { key: "year", label: "Год" },
     { key: "mileageKm", label: "Пробег" },
+    { key: "priceUsd", label: "Цена USD" },
     { key: "price", label: "Цена €" },
+    { key: "priceMdl", label: "Цена MDL" },
     { key: "priceWon", label: "Цена ₩" },
 ];
 
@@ -78,7 +79,6 @@ export default function CarTable({
                         const isInactive = car.isActive === false;
                         const isNew = car.isNew === true;
                         const isSelected = selectedId === car.id;
-                        const caromotoPrice = getCaromotoPriceEur(car);
                         const externalCarUrl = getExternalCarUrl(car);
                         const originBadge = getOriginBadge(car.origin);
                         const carOrigin = car.origin ?? "encar";
@@ -170,8 +170,10 @@ export default function CarTable({
                                         <div className="text-xs text-slate-500">
                                             {fmtKm(car.mileageKm)}
                                         </div>
-                                        <div className="mt-2 text-base font-semibold text-slate-800">
-                                            {fmtEur(car.price)}
+                                        <div className="mt-2 space-y-1 text-sm font-semibold text-slate-800">
+                                            <div>{fmtUsd(car.priceUsd)}</div>
+                                            <div>{fmtEur(car.price)}</div>
+                                            <div>{fmtMdl(car.priceMdl)}</div>
                                         </div>
                                         <button
                                             onClick={(e) => {
@@ -196,12 +198,6 @@ export default function CarTable({
 
                                 <div className="mb-3 flex items-center justify-between gap-2">
                                     <DamageBadge car={car} />
-                                    <div className="text-xs font-medium text-slate-500">
-                                        Caromoto:{" "}
-                                        {caromotoPrice != null
-                                            ? fmtEur(caromotoPrice)
-                                            : "—"}
-                                    </div>
                                 </div>
 
                                 <div
@@ -269,20 +265,6 @@ export default function CarTable({
                                         />
                                     </th>
                                 ))}
-                                <th
-                                    onClick={() => onSort("caromotoPrice")}
-                                    className={`cursor-pointer select-none whitespace-nowrap py-4 text-right text-xs font-semibold uppercase tracking-widest transition-colors ${
-                                        sortKey === "caromotoPrice"
-                                            ? "text-blue-600"
-                                            : "text-slate-400 hover:text-slate-700"
-                                    }`}
-                                >
-                                    Caromoto Price €
-                                    <SortArrow
-                                        active={sortKey === "caromotoPrice"}
-                                        dir={sortDir}
-                                    />
-                                </th>
                                 <th className="py-4 text-left text-xs font-semibold uppercase tracking-widest text-slate-400">
                                     Обновлено
                                 </th>
@@ -304,7 +286,7 @@ export default function CarTable({
                             {cars.length === 0 && (
                                 <tr>
                                     <td
-                                        colSpan={12}
+                                        colSpan={13}
                                         className="py-24 text-center text-base text-slate-400"
                                     >
                                         Ничего не найдено
@@ -324,7 +306,6 @@ export default function CarTable({
                                 const strongText = isInactive
                                     ? "text-slate-500"
                                     : "text-slate-800";
-                                const caromotoPrice = getCaromotoPriceEur(car);
                                 const externalCarUrl = getExternalCarUrl(car);
                                 const originBadge = getOriginBadge(car.origin);
                                 const favoriteDisabled =
@@ -393,7 +374,17 @@ export default function CarTable({
                                         <td
                                             className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
                                         >
+                                            {fmtUsd(car.priceUsd)}
+                                        </td>
+                                        <td
+                                            className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
+                                        >
                                             {fmtEur(car.price)}
+                                        </td>
+                                        <td
+                                            className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
+                                        >
+                                            {fmtMdl(car.priceMdl)}
                                         </td>
                                         <td
                                             className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
@@ -404,13 +395,6 @@ export default function CarTable({
                                                 </span>
                                                 <PriceTrendWon car={car} />
                                             </div>
-                                        </td>
-                                        <td
-                                            className={`whitespace-nowrap py-4 text-right font-mono font-semibold ${strongText}`}
-                                        >
-                                            {caromotoPrice != null
-                                                ? fmtEur(caromotoPrice)
-                                                : "—"}
                                         </td>
                                         <td
                                             className={`py-4 text-sm ${isInactive ? "text-slate-500" : "text-slate-400"}`}

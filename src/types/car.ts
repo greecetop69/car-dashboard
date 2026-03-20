@@ -27,6 +27,8 @@ export interface Car {
   year: number;
   mileageKm: number;
   price: number;
+  priceUsd: number;
+  priceMdl: number;
   priceWon: number;
   previousPriceWon?: number | null;
   priceDeltaWon?: number;
@@ -44,5 +46,12 @@ export interface Car {
   modifiedDate: string;
 }
 
-export type SortKey = "sourceId" | "year" | "mileageKm" | "price" | "priceWon" | "caromotoPrice";
+export type SortKey =
+  | "sourceId"
+  | "year"
+  | "mileageKm"
+  | "price"
+  | "priceUsd"
+  | "priceMdl"
+  | "priceWon";
 export type SortDir = "asc" | "desc";

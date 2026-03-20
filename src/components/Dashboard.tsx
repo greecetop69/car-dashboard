@@ -9,7 +9,6 @@ import {
 } from "../constants/dashboard";
 import { useCars, useSyncCars, useToggleFavorite } from "../hooks/useCars";
 import type { InspectionConditionKey, SortDir, SortKey } from "../types/car";
-import { compareByCaromotoPrice } from "../utils/caromoto";
 import { formatDateTimeChisinau } from "../utils/dateTime";
 import { fmtKm, fmtWon } from "../utils/format";
 import CarTable from "./CarTable";
@@ -161,7 +160,12 @@ export default function Dashboard() {
                     String(car.mileageKm),
                     car.modifiedDate,
                 ];
-                const numberFields = [String(car.price), String(car.priceWon)];
+                const numberFields = [
+                    String(car.priceUsd),
+                    String(car.price),
+                    String(car.priceMdl),
+                    String(car.priceWon),
+                ];
 
                 const byText = textFields.some((value) =>
                     value.toLowerCase().includes(q),
@@ -215,9 +219,6 @@ export default function Dashboard() {
         if (!sortKey) return filtered;
 
         return [...filtered].sort((a, b) => {
-            if (sortKey === "caromotoPrice") {
-                return compareByCaromotoPrice(a, b, sortDir);
-            }
             if (sortKey === "sourceId") {
                 const va = Number(a.sourceId ?? 0);
                 const vb = Number(b.sourceId ?? 0);

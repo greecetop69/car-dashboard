@@ -6,7 +6,7 @@ import {
     type NotificationType,
 } from "./db/entities/Notification.js";
 import type { CarOrigin, ParsedCarRecord } from "./carSources.js";
-import { getWonToEurRate } from "./fx.js";
+import { getEurToMdlRate, getWonToEurRate, getWonToUsdRate } from "./fx.js";
 import {
     getInspectionSummaryWithCarCache,
     warmEncarInspectionCacheForCarIds,
@@ -40,6 +40,8 @@ export interface CarRow {
     year: number;
     mileageKm: number;
     price: number;
+    priceUsd: number;
+    priceMdl: number;
     priceWon: number;
     url: string;
     inspectionUrl: string;
@@ -579,9 +581,44 @@ function buildMeta(cars: CarRow[]) {
     };
 }
 
+function calculateCasaAsiaCustomsUsd(year: number) {
+    if (!Number.isFinite(year) || year <= 0) return 0;
+    const customsUsd = 2721 - (year - 2018) * 243;
+    return Math.max(0, Math.round(customsUsd));
+}
+
+function calculateCasaAsiaPrices(input: {
+    priceWon: number;
+    year: number;
+    wonToUsd: number;
+    wonToEur: number;
+    eurToMdl: number;
+}) {
+    const priceWithEncarTaxWon = input.priceWon + 500_000;
+    const basePriceUsd = Math.round(priceWithEncarTaxWon * input.wonToUsd);
+    const customsUsd = calculateCasaAsiaCustomsUsd(input.year);
+    const totalUsd = basePriceUsd + 3000 + customsUsd;
+    const usdToEur =
+        input.wonToUsd > 0 && input.wonToEur > 0
+            ? input.wonToEur / input.wonToUsd
+            : 0;
+    const totalEur = Math.round(totalUsd * usdToEur);
+    const totalMdl = Math.round(totalEur * input.eurToMdl);
+
+    return {
+        totalUsd,
+        totalEur,
+        totalMdl,
+    };
+}
+
 export async function getCarsFromDb(): Promise<CarsApiResponse> {
     await initializeDatabase();
-    const wonToEur = await getWonToEurRate();
+    const [wonToUsd, wonToEur, eurToMdl] = await Promise.all([
+        getWonToUsdRate(),
+        getWonToEurRate(),
+        getEurToMdlRate(),
+    ]);
 
     const carRepo = AppDataSource.getRepository(Car);
     const historyRepo = AppDataSource.getRepository(CarPriceHistory);
@@ -718,7 +755,13 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
         const currentPriceWon = Number(row.price_won);
         const priceDeltaWon =
             previousPriceWon == null ? 0 : currentPriceWon - previousPriceWon;
-        const currentPriceEur = Math.round(currentPriceWon * wonToEur);
+        const casaAsiaPrices = calculateCasaAsiaPrices({
+            priceWon: currentPriceWon,
+            year: row.year,
+            wonToUsd,
+            wonToEur,
+            eurToMdl,
+        });
         const photos =
             typeof row.photos_json === "string"
                 ? (JSON.parse(row.photos_json) as ParsedCarRecord["photos"])
@@ -741,7 +784,9 @@ export async function getCarsFromDb(): Promise<CarsApiResponse> {
             isFavorite: toBoolFlag(row.is_favorite),
             year: row.year,
             mileageKm: row.mileage_km,
-            price: currentPriceEur,
+            price: casaAsiaPrices.totalEur,
+            priceUsd: casaAsiaPrices.totalUsd,
+            priceMdl: casaAsiaPrices.totalMdl,
             priceWon: currentPriceWon,
             url: row.url,
             inspectionUrl: row.inspection_url,
